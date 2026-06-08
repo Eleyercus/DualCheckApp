@@ -5,6 +5,7 @@ const db = require('./config/db')
 const authRoutes = require('./routes/authRoutes')
 const { verificarToken, soloAdmin } = require('./middleware/auth')
 const estudiantesRoutes = require('./routes/estudiantesRoutes')
+const docentesRoutes = require('./routes/docentesRoutes')
 
 dotenv.config()
 
@@ -19,6 +20,7 @@ app.use(express.urlencoded({ extended: true }))
 // Rutas
 app.use('/api/auth', authRoutes)
 app.use('/api/estudiantes', estudiantesRoutes)
+app.use('/api/docentes', docentesRoutes)
 
 // Ruta de prueba
 app.get('/', (req, res) => {
