@@ -4,6 +4,7 @@ const dotenv = require('dotenv')
 const db = require('./config/db')
 const authRoutes = require('./routes/authRoutes')
 const { verificarToken, soloAdmin } = require('./middleware/auth')
+const estudiantesRoutes = require('./routes/estudiantesRoutes')
 
 dotenv.config()
 
@@ -17,6 +18,7 @@ app.use(express.urlencoded({ extended: true }))
 
 // Rutas
 app.use('/api/auth', authRoutes)
+app.use('/api/estudiantes', estudiantesRoutes)
 
 // Ruta de prueba
 app.get('/', (req, res) => {
@@ -26,6 +28,8 @@ app.get('/', (req, res) => {
 app.get('/api/protegida', verificarToken, soloAdmin, (req, res) => {
   res.json({ mensaje: `Hola ${req.usuario.correo}, tienes acceso de administrador` })
 })
+
+
 
 // Iniciar servidor
 app.listen(PORT, () => {
