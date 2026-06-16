@@ -6,6 +6,7 @@ const authRoutes = require('./routes/authRoutes')
 const estudiantesRoutes = require('./routes/estudiantesRoutes')
 const docentesRoutes = require('./routes/docentesRoutes')
 const asignacionesRoutes = require('./routes/asignacionesRoutes')
+const asistenciaRoutes = require('./routes/asistenciaRoutes')
 const { verificarToken, soloAdmin } = require('./middleware/auth')
 
 dotenv.config()
@@ -21,6 +22,7 @@ app.use('/api/auth', authRoutes)
 app.use('/api/estudiantes', estudiantesRoutes)
 app.use('/api/docentes', docentesRoutes)
 app.use('/api/asignaciones', asignacionesRoutes)
+app.use('/api/asistencia', asistenciaRoutes)
 
 app.get('/', (req, res) => {
   res.json({ mensaje: 'Servidor DualCheck funcionando correctamente' })
