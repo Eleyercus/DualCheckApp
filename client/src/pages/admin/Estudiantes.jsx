@@ -4,19 +4,171 @@ import api from '../../services/api'
 const TABS = ['datos', 'requisitos', 'empresa']
 const TAB_LABELS = { datos: 'Datos personales', requisitos: 'Requisitos', empresa: 'Datos de estadía' }
 
-const requisitos = [
+const REQUISITOS = [
   { key: 'req_datos_estadia', label: 'Datos de Estadía' },
   { key: 'req_carta_no_adeudo', label: 'Carta de No Adeudo o Convenio de Pago' },
   { key: 'req_carta_servicios', label: 'Carta de Servicios Escolares' },
 ]
 
-const badgeEstatus = {
+const BADGE_ESTATUS = {
   activo: { label: 'Activo', clase: 'badge-activo' },
   baja: { label: 'Baja', clase: 'badge-baja' },
   baja_reprobacion: { label: 'Baja Reprobación', clase: 'badge-baja' },
   reincorporado: { label: 'Reincorporado', clase: 'badge-activo' },
 }
 
+const FORM_INICIAL = {
+  matricula: '', nombre: '', apellido_p: '', apellido_m: '',
+  grupo: '', generacion: '', abrev_carrera: '', carrera: '',
+  programa: '', telefono_celular: '', telefono_casa: '',
+  direccion: '', colonia: '', cp: '', sexo: '', correo: '',
+  req_datos_estadia: false, req_carta_no_adeudo: false, req_carta_servicitos: false,
+  nombre_estadia: '', nombre_empresa: '', rfc: '', nombre_responsable: '',
+  puesto_responsable: '', emp_direccion: '', emp_colonia: '', emp_cp: '',
+  emp_telefono: '', emp_correo: '', giro: '', tamano: '', regimen_juridico: ''
+}
+
+// ─── Componente Detalle (separado para poder usar hooks) ────────────────────
+function DetalleEstudiante({ estudiante: e, onVolver, onActualizarRequisitos, onBaja, mensaje, error }) {
+  const [reqLocal, setReqLocal] = useState({
+    req_datos_estadia: !!e.req_datos_estadia,
+    req_carta_no_adeudo: !!e.req_carta_no_adeudo,
+    req_carta_servicios: !!e.req_carta_servicios,
+  })
+
+  const toggleReq = (key) => setReqLocal(prev => ({ ...prev, [key]: !prev[key] }))
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '1.25rem' }}>
+        <button onClick={onVolver}
+          style={{ background: 'none', border: 'none', color: 'var(--verde)', cursor: 'pointer', fontSize: '13px' }}>
+          ← Volver
+        </button>
+        <h2 style={{ fontSize: '1.1rem', fontWeight: '700', color: 'var(--verde-oscuro)' }}>
+          {e.nombre} {e.apellido_p} {e.apellido_m}
+        </h2>
+        <span className={BADGE_ESTATUS[e.estatus_especial]?.clase || 'badge-activo'}>
+          {BADGE_ESTATUS[e.estatus_especial]?.label || 'Activo'}
+        </span>
+      </div>
+
+      {mensaje && <div className="alerta-exito">{mensaje}</div>}
+      {error && <div className="alerta-error">{error}</div>}
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+
+        {/* Datos personales */}
+        <div className="card">
+          <h3 style={{ fontSize: '13px', fontWeight: '600', color: 'var(--verde-oscuro)', marginBottom: '12px' }}>
+            Datos personales
+          </h3>
+          {[
+            ['Matrícula', e.matricula],
+            ['Correo', e.correo],
+            ['Carrera', e.carrera || '—'],
+            ['Grupo', e.grupo || '—'],
+            ['Generación', e.generacion || '—'],
+            ['Tel. celular', e.telefono_celular || '—'],
+            ['Tel. casa', e.telefono_casa || '—'],
+            ['Dirección', e.direccion ? `${e.direccion}, ${e.colonia}, C.P. ${e.cp}` : '—'],
+            ['Sexo', e.sexo === 'M' ? 'Masculino' : e.sexo === 'F' ? 'Femenino' : '—'],
+          ].map(([label, valor]) => (
+            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '0.5px solid #f3f4f6' }}>
+              <span style={{ fontSize: '12px', color: 'var(--texto-muted)' }}>{label}</span>
+              <span style={{ fontSize: '12px', fontWeight: '500', color: 'var(--texto)', textAlign: 'right', maxWidth: '60%' }}>{valor}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Requisitos */}
+        <div className="card">
+          <h3 style={{ fontSize: '13px', fontWeight: '600', color: 'var(--verde-oscuro)', marginBottom: '12px' }}>
+            Requisitos para asignación
+          </h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {REQUISITOS.map(({ key, label }) => (
+              <div key={key} onClick={() => toggleReq(key)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                  padding: '10px 12px', borderRadius: '6px', cursor: 'pointer',
+                  border: `1px solid ${reqLocal[key] ? 'var(--verde)' : 'var(--borde)'}`,
+                  background: reqLocal[key] ? '#f0fdf4' : '#fff', transition: 'all .15s'
+                }}>
+                <div style={{
+                  width: '18px', height: '18px', borderRadius: '50%', flexShrink: 0,
+                  background: reqLocal[key] ? 'var(--verde)' : '#fff',
+                  border: `2px solid ${reqLocal[key] ? 'var(--verde)' : 'var(--borde)'}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                  {reqLocal[key] && <span style={{ color: '#fff', fontSize: '11px' }}>✓</span>}
+                </div>
+                <div>
+                  <p style={{ fontSize: '12px', fontWeight: '500', color: reqLocal[key] ? 'var(--verde-oscuro)' : 'var(--texto)' }}>
+                    {label}
+                  </p>
+                  <p style={{ fontSize: '11px', color: 'var(--texto-muted)', marginTop: '1px' }}>
+                    {reqLocal[key] ? 'Entregado' : 'Pendiente'}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <button className="btn-primario" style={{ width: '100%', marginTop: '12px' }}
+            onClick={() => onActualizarRequisitos(e.id, reqLocal)}>
+            Guardar requisitos
+          </button>
+        </div>
+
+        {/* Datos empresa */}
+        <div className="card" style={{ gridColumn: '1 / -1' }}>
+          <h3 style={{ fontSize: '13px', fontWeight: '600', color: 'var(--verde-oscuro)', marginBottom: '12px' }}>
+            Datos de la empresa / estadía
+          </h3>
+          {e.nombre_empresa ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+              {[
+                ['Nombre estadía', e.nombre_estadia],
+                ['Empresa', e.nombre_empresa],
+                ['RFC', e.rfc],
+                ['Responsable', e.nombre_responsable],
+                ['Puesto', e.puesto_responsable],
+                ['Giro', e.giro],
+                ['Tamaño', e.tamano],
+                ['Régimen', e.regimen_juridico],
+                ['Tel. empresa', e.emp_telefono],
+                ['Correo empresa', e.emp_correo],
+              ].filter(([, valor]) => valor).map(([label, valor]) => (
+                <div key={label} style={{ padding: '6px 0' }}>
+                  <div style={{ fontSize: '10px', color: 'var(--texto-muted)' }}>{label}</div>
+                  <div style={{ fontSize: '12px', fontWeight: '500' }}>{valor}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ fontSize: '12px', color: 'var(--texto-muted)' }}>
+              No hay datos de empresa registrados aún.
+            </p>
+          )}
+        </div>
+
+        {/* Zona de riesgo */}
+        {e.estatus ? (
+          <div className="card" style={{ gridColumn: '1 / -1', borderTop: '3px solid #dc2626' }}>
+            <h3 style={{ fontSize: '13px', fontWeight: '600', color: '#991b1b', marginBottom: '10px' }}>
+              Zona de riesgo
+            </h3>
+            <button className="btn-peligro" onClick={() => onBaja(e.id)}>
+              Dar de baja al estudiante
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+// ─── Componente principal ───────────────────────────────────────────────────
 export default function Estudiantes() {
   const [estudiantes, setEstudiantes] = useState([])
   const [cargando, setCargando] = useState(true)
@@ -27,16 +179,7 @@ export default function Estudiantes() {
   const [estudianteDetalle, setEstudianteDetalle] = useState(null)
   const [archivo, setArchivo] = useState(null)
   const [cargandoArchivo, setCargandoArchivo] = useState(false)
-  const [form, setForm] = useState({
-    matricula: '', nombre: '', apellido_p: '', apellido_m: '',
-    grupo: '', generacion: '', abrev_carrera: '', carrera: '',
-    programa: '', telefono_celular: '', telefono_casa: '',
-    direccion: '', colonia: '', cp: '', sexo: '', correo: '',
-    req_datos_estadia: false, req_carta_no_adeudo: false, req_carta_servicios: false,
-    nombre_estadia: '', nombre_empresa: '', rfc: '', nombre_responsable: '',
-    puesto_responsable: '', emp_direccion: '', emp_colonia: '', emp_cp: '',
-    emp_telefono: '', emp_correo: '', giro: '', tamano: '', regimen_juridico: ''
-  })
+  const [form, setForm] = useState({ ...FORM_INICIAL })
 
   useEffect(() => { cargar() }, [])
 
@@ -51,6 +194,8 @@ export default function Estudiantes() {
 
   const limpiar = () => { setMensaje(''); setError('') }
 
+  const resetForm = () => { setForm({ ...FORM_INICIAL }); setTabForm('datos') }
+
   const handleSubmit = async (e) => {
     e.preventDefault(); limpiar()
     try {
@@ -60,20 +205,6 @@ export default function Estudiantes() {
       setVista('lista')
       cargar()
     } catch (err) { setError(err.response?.data?.error || 'Error al registrar') }
-  }
-
-  const resetForm = () => {
-    setForm({
-      matricula: '', nombre: '', apellido_p: '', apellido_m: '',
-      grupo: '', generacion: '', abrev_carrera: '', carrera: '',
-      programa: '', telefono_celular: '', telefono_casa: '',
-      direccion: '', colonia: '', cp: '', sexo: '', correo: '',
-      req_datos_estadia: false, req_carta_no_adeudo: false, req_carta_servicios: false,
-      nombre_estadia: '', nombre_empresa: '', rfc: '', nombre_responsable: '',
-      puesto_responsable: '', emp_direccion: '', emp_colonia: '', emp_cp: '',
-      emp_telefono: '', emp_correo: '', giro: '', tamano: '', regimen_juridico: ''
-    })
-    setTabForm('datos')
   }
 
   const handleCargaMasiva = async () => {
@@ -93,13 +224,11 @@ export default function Estudiantes() {
   }
 
   const handleActualizarRequisitos = async (id, reqs) => {
+    limpiar()
     try {
       await api.patch(`/estudiantes/${id}/requisitos`, reqs)
-      setMensaje('Requisitos actualizados')
+      setMensaje('Requisitos actualizados correctamente')
       cargar()
-      if (estudianteDetalle?.id === id) {
-        setEstudianteDetalle({ ...estudianteDetalle, ...reqs })
-      }
     } catch { setError('Error actualizando requisitos') }
   }
 
@@ -125,15 +254,29 @@ export default function Estudiantes() {
   }
 
   const cumpleRequisitos = (e) => e.req_datos_estadia && e.req_carta_no_adeudo && e.req_carta_servicios
-
   const activos = estudiantes.filter(e => e.estatus && e.estatus_especial === 'activo').length
   const sinRequisitos = estudiantes.filter(e => e.estatus && !cumpleRequisitos(e)).length
 
+  // ── Vista: detalle ────────────────────────────────────────────────────────
+  if (vista === 'detalle' && estudianteDetalle) {
+    return (
+      <DetalleEstudiante
+        estudiante={estudianteDetalle}
+        mensaje={mensaje}
+        error={error}
+        onVolver={() => { setVista('lista'); setEstudianteDetalle(null); limpiar() }}
+        onActualizarRequisitos={handleActualizarRequisitos}
+        onBaja={handleBaja}
+      />
+    )
+  }
+
+  // ── Vista: nuevo estudiante ───────────────────────────────────────────────
   if (vista === 'nuevo') return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '1.25rem' }}>
         <button onClick={() => { setVista('lista'); resetForm(); limpiar() }}
-          style={{ background: 'none', border: 'none', color: 'var(--verde)', cursor: 'pointer', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+          style={{ background: 'none', border: 'none', color: 'var(--verde)', cursor: 'pointer', fontSize: '13px' }}>
           ← Volver
         </button>
         <h2 style={{ fontSize: '1.1rem', fontWeight: '700', color: 'var(--verde-oscuro)' }}>
@@ -143,8 +286,8 @@ export default function Estudiantes() {
 
       {error && <div className="alerta-error">{error}</div>}
 
-      {/* Tabs del formulario */}
-      <div style={{ display: 'flex', gap: '0', marginBottom: '1.25rem', borderBottom: '2px solid var(--borde)' }}>
+      {/* Tabs */}
+      <div style={{ display: 'flex', marginBottom: '1.25rem', borderBottom: '2px solid var(--borde)' }}>
         {TABS.map(tab => (
           <button key={tab} onClick={() => setTabForm(tab)} style={{
             padding: '8px 20px', background: 'none', border: 'none',
@@ -159,6 +302,7 @@ export default function Estudiantes() {
       </div>
 
       <form onSubmit={handleSubmit}>
+
         {/* Tab: Datos personales */}
         {tabForm === 'datos' && (
           <div className="card">
@@ -184,7 +328,7 @@ export default function Estudiantes() {
                   <label className="form-label">{label}</label>
                   <input className="form-input" value={form[key]}
                     onChange={e => setForm({ ...form, [key]: e.target.value })}
-                    required={req} />
+                    required={!!req} />
                 </div>
               ))}
               <div className="form-campo">
@@ -212,7 +356,7 @@ export default function Estudiantes() {
               Los 3 requisitos deben estar completos para poder asignar asesor al estudiante.
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {requisitos.map(({ key, label }) => (
+              {REQUISITOS.map(({ key, label }) => (
                 <div key={key} onClick={() => setForm({ ...form, [key]: !form[key] })}
                   style={{
                     display: 'flex', alignItems: 'center', gap: '14px',
@@ -239,20 +383,14 @@ export default function Estudiantes() {
                 </div>
               ))}
             </div>
-            {!form.req_datos_estadia || !form.req_carta_no_adeudo || !form.req_carta_servicios ? (
-              <div style={{
-                background: '#fff7ed', border: '1px solid #fed7aa',
-                borderRadius: '6px', padding: '10px 14px', marginTop: '1rem'
-              }}>
+            {(!form.req_datos_estadia || !form.req_carta_no_adeudo || !form.req_carta_servicios) ? (
+              <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '6px', padding: '10px 14px', marginTop: '1rem' }}>
                 <p style={{ fontSize: '12px', color: '#9a3412' }}>
                   ⚠ El estudiante se registrará pero no podrá ser asignado a un asesor hasta completar los 3 requisitos.
                 </p>
               </div>
             ) : (
-              <div style={{
-                background: '#f0fdf4', border: '1px solid #86efac',
-                borderRadius: '6px', padding: '10px 14px', marginTop: '1rem'
-              }}>
+              <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '6px', padding: '10px 14px', marginTop: '1rem' }}>
                 <p style={{ fontSize: '12px', color: '#166534' }}>
                   ✓ Requisitos completos. El estudiante podrá ser asignado a un asesor.
                 </p>
@@ -304,138 +442,7 @@ export default function Estudiantes() {
     </div>
   )
 
-  if (vista === 'detalle' && estudianteDetalle) {
-    const e = estudianteDetalle
-    const [reqLocal, setReqLocal] = useState({
-      req_datos_estadia: !!e.req_datos_estadia,
-      req_carta_no_adeudo: !!e.req_carta_no_adeudo,
-      req_carta_servicios: !!e.req_carta_servicios,
-    })
-
-    return (
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '1.25rem' }}>
-          <button onClick={() => { setVista('lista'); setEstudianteDetalle(null); limpiar() }}
-            style={{ background: 'none', border: 'none', color: 'var(--verde)', cursor: 'pointer', fontSize: '13px' }}>
-            ← Volver
-          </button>
-          <h2 style={{ fontSize: '1.1rem', fontWeight: '700', color: 'var(--verde-oscuro)' }}>
-            {e.nombre} {e.apellido_p} {e.apellido_m}
-          </h2>
-          <span className={badgeEstatus[e.estatus_especial]?.clase || 'badge-activo'}>
-            {badgeEstatus[e.estatus_especial]?.label || e.estatus_especial}
-          </span>
-        </div>
-
-        {mensaje && <div className="alerta-exito">{mensaje}</div>}
-        {error && <div className="alerta-error">{error}</div>}
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-          {/* Datos personales */}
-          <div className="card">
-            <h3 style={{ fontSize: '13px', fontWeight: '600', color: 'var(--verde-oscuro)', marginBottom: '12px' }}>
-              Datos personales
-            </h3>
-            {[
-              ['Matrícula', e.matricula],
-              ['Correo', e.correo],
-              ['Carrera', e.carrera || '—'],
-              ['Grupo', e.grupo || '—'],
-              ['Generación', e.generacion || '—'],
-              ['Tel. celular', e.telefono_celular || '—'],
-              ['Tel. casa', e.telefono_casa || '—'],
-              ['Dirección', e.direccion ? `${e.direccion}, ${e.colonia}, C.P. ${e.cp}` : '—'],
-              ['Sexo', e.sexo === 'M' ? 'Masculino' : e.sexo === 'F' ? 'Femenino' : '—'],
-            ].map(([label, valor]) => (
-              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '0.5px solid #f3f4f6' }}>
-                <span style={{ fontSize: '12px', color: 'var(--texto-muted)' }}>{label}</span>
-                <span style={{ fontSize: '12px', fontWeight: '500', color: 'var(--texto)', textAlign: 'right', maxWidth: '60%' }}>{valor}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Requisitos */}
-          <div className="card">
-            <h3 style={{ fontSize: '13px', fontWeight: '600', color: 'var(--verde-oscuro)', marginBottom: '12px' }}>
-              Requisitos para asignación
-            </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {requisitos.map(({ key, label }) => (
-                <div key={key} onClick={() => setReqLocal({ ...reqLocal, [key]: !reqLocal[key] })}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '10px',
-                    padding: '10px 12px', borderRadius: '6px', cursor: 'pointer',
-                    border: `1px solid ${reqLocal[key] ? 'var(--verde)' : 'var(--borde)'}`,
-                    background: reqLocal[key] ? '#f0fdf4' : '#fff'
-                  }}>
-                  <div style={{
-                    width: '18px', height: '18px', borderRadius: '50%', flexShrink: 0,
-                    background: reqLocal[key] ? 'var(--verde)' : '#fff',
-                    border: `2px solid ${reqLocal[key] ? 'var(--verde)' : 'var(--borde)'}`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center'
-                  }}>
-                    {reqLocal[key] && <span style={{ color: '#fff', fontSize: '11px' }}>✓</span>}
-                  </div>
-                  <span style={{ fontSize: '12px', fontWeight: '500' }}>{label}</span>
-                </div>
-              ))}
-            </div>
-            <button className="btn-primario" style={{ width: '100%', marginTop: '12px' }}
-              onClick={() => handleActualizarRequisitos(e.id, reqLocal)}>
-              Guardar requisitos
-            </button>
-          </div>
-
-          {/* Datos empresa */}
-          <div className="card" style={{ gridColumn: '1 / -1' }}>
-            <h3 style={{ fontSize: '13px', fontWeight: '600', color: 'var(--verde-oscuro)', marginBottom: '12px' }}>
-              Datos de la empresa / estadía
-            </h3>
-            {e.nombre_empresa ? (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-                {[
-                  ['Nombre estadía', e.nombre_estadia],
-                  ['Empresa', e.nombre_empresa],
-                  ['RFC', e.rfc],
-                  ['Responsable', e.nombre_responsable],
-                  ['Puesto', e.puesto_responsable],
-                  ['Giro', e.giro],
-                  ['Tamaño', e.tamano],
-                  ['Régimen', e.regimen_juridico],
-                  ['Tel. empresa', e.emp_telefono],
-                  ['Correo empresa', e.emp_correo],
-                ].map(([label, valor]) => valor ? (
-                  <div key={label} style={{ padding: '6px 0' }}>
-                    <div style={{ fontSize: '10px', color: 'var(--texto-muted)' }}>{label}</div>
-                    <div style={{ fontSize: '12px', fontWeight: '500' }}>{valor}</div>
-                  </div>
-                ) : null)}
-              </div>
-            ) : (
-              <p style={{ fontSize: '12px', color: 'var(--texto-muted)' }}>
-                No hay datos de empresa registrados aún.
-              </p>
-            )}
-          </div>
-
-          {/* Acciones */}
-          {e.estatus && (
-            <div className="card" style={{ gridColumn: '1 / -1' }}>
-              <h3 style={{ fontSize: '13px', fontWeight: '600', color: '#991b1b', marginBottom: '10px' }}>
-                Zona de riesgo
-              </h3>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button className="btn-peligro" onClick={() => handleBaja(e.id)}>
-                  Dar de baja al estudiante
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    )
-  }
-
+  // ── Vista: lista ──────────────────────────────────────────────────────────
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
@@ -522,7 +529,7 @@ export default function Estudiantes() {
                             <div key={i} style={{
                               width: '10px', height: '10px', borderRadius: '50%',
                               background: r ? 'var(--verde)' : '#e5e7eb'
-                            }} title={requisitos[i]?.label} />
+                            }} title={REQUISITOS[i]?.label} />
                           ))}
                           <span style={{ fontSize: '11px', color: completados === 3 ? 'var(--verde)' : '#dc2626', marginLeft: '4px', fontWeight: '500' }}>
                             {completados}/3
@@ -530,8 +537,8 @@ export default function Estudiantes() {
                         </div>
                       </td>
                       <td>
-                        <span className={badgeEstatus[e.estatus_especial]?.clase || 'badge-activo'}>
-                          {badgeEstatus[e.estatus_especial]?.label || 'Activo'}
+                        <span className={BADGE_ESTATUS[e.estatus_especial]?.clase || 'badge-activo'}>
+                          {BADGE_ESTATUS[e.estatus_especial]?.label || 'Activo'}
                         </span>
                       </td>
                       <td>

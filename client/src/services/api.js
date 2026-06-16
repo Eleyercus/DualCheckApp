@@ -4,7 +4,6 @@ const api = axios.create({
   baseURL: 'http://localhost:3001/api',
 })
 
-// Agregar el token automáticamente a cada request
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token')
   if (token) {
@@ -13,14 +12,18 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// Si el token expira, regresar al login
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 403) {
-      localStorage.removeItem('token')
-      localStorage.removeItem('perfil')
-      window.location.href = '/'
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      const esLoginRoute = error.config.url.includes('/auth/login')
+      if (!esLoginRoute) {
+        localStorage.removeItem('token')
+        localStorage.removeItem('perfil')
+        localStorage.removeItem('correo')
+        alert('Tu sesión ha expirado. Por favor inicia sesión de nuevo.')
+        window.location.href = '/'
+      }
     }
     return Promise.reject(error)
   }

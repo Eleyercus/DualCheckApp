@@ -1,0 +1,6 @@
+//comando para correr base de datos//
+mysql -u root -p dualcheck_db
+
+//comando para correr server en consola//
+cd server
+pnpm dev
