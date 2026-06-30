@@ -9,7 +9,7 @@ const getDocentes = async (req, res) => {
              COUNT(a.id) AS estudiantes_asignados
       FROM docentes d
       JOIN usuarios u ON d.id_usuario = u.id
-      LEFT JOIN asignaciones a ON a.id_docente = d.id AND a.activa = 1
+      LEFT JOIN asignaciones a ON a.id_docente = d.id AND a.estatus = 'activa'
       GROUP BY d.id
       ORDER BY d.apellido_p, d.nombre
     `)

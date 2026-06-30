@@ -48,7 +48,15 @@ export default function Asignaciones() {
       setError(err.response?.data?.error || 'Error al crear asignación')
     } finally { setGuardando(false) }
   }
-
+  const handleConcluir = async (id) => {
+    if (!confirm('¿Marcar esta asignación como concluida? El estudiante terminó su estadía en este periodo.')) return
+    limpiar()
+    try {
+      await api.patch(`/asignaciones/${id}/concluir`)
+      setMensaje('Asignación marcada como concluida')
+      cargarTodo()
+    } catch { setError('Error al concluir asignación') }
+  }
   const handleCancelar = async (id) => {
     if (!confirm('¿Cancelar esta asignación? El estudiante quedará sin asesor.')) return
     limpiar()
@@ -217,8 +225,8 @@ export default function Asignaciones() {
             <table className="tabla">
               <thead>
                 <tr>
-                  {['Estudiante', 'Matrícula', 'Grupo', 'Docente asesor', 'Fecha', 'Estatus', 'Acciones'].map(c => (
-                    <th key={c}>{c}</th>
+                  {['Estudiante', 'Matrícula', 'Grupo', 'Docente asesor', 'Periodo', 'Fecha', 'Estatus', 'Acciones'].map(c => (
+                  <th key={c}>{c}</th>
                   ))}
                 </tr>
               </thead>
@@ -231,6 +239,7 @@ export default function Asignaciones() {
                     <td>{a.matricula}</td>
                     <td>{a.grupo || '—'}</td>
                     <td>{a.doc_nombre} {a.doc_apellido_p}</td>
+<td style=          {{ fontSize: '11px', color: 'var(--texto-muted)' }}>{a.periodo_nombre}</td>
                     <td style={{ color: 'var(--texto-muted)', fontSize: '12px' }}>
                       {new Date(a.fecha_asignacion).toLocaleDateString('es-MX', {
                         day: '2-digit', month: 'short', year: 'numeric'
@@ -239,17 +248,22 @@ export default function Asignaciones() {
                     <td>
                       <span style={{
                         fontSize: '11px', fontWeight: '500', padding: '2px 8px', borderRadius: '99px',
-                        background: a.activa ? '#dcfce7' : '#fee2e2',
-                        color: a.activa ? '#166534' : '#991b1b'
-                      }}>
-                        {a.activa ? 'Activa' : 'Cancelada'}
+                        background: a.estatus === 'activa' ? '#dcfce7' : a.estatus === 'concluida' ? '#dbeafe' : '#fee2e2',
+                        color: a.estatus === 'activa' ? '#166534' : a.estatus === 'concluida' ? '#1e40af' : '#991b1b'
+                        }}>
+                        {a.estatus === 'activa' ? 'Activa' : a.estatus === 'concluida' ? 'Concluida' : 'Cancelada'}
                       </span>
                     </td>
                     <td>
-                      {a.activa ? (
+                      {a.estatus === 'activa' ? (
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button className="btn-secundario" style={{ fontSize: '11px', padding: '4px 10px' }} onClick={() => handleConcluir(a.id)}>
+                          Concluir
+                        </button>
                         <button className="btn-peligro" onClick={() => handleCancelar(a.id)}>
                           Cancelar
                         </button>
+                      </div>
                       ) : '—'}
                     </td>
                   </tr>

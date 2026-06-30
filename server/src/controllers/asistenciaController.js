@@ -78,25 +78,34 @@ const validarAsignacion = async (req, res) => {
   }
 }
 
-// Calcula la semana actual del periodo (1-13) basada en la fecha de inicio
-// Si no hay fecha de inicio configurada, usa la semana del año actual como referencia
-const calcularSemanaActual = () => {
-  // Por ahora calculamos semana del año como aproximación
-  // En producción esto vendría de una tabla de configuración del periodo
-  const ahora = new Date()
-  const inicioAnio = new Date(ahora.getFullYear(), 0, 1)
-  const semanaAnio = Math.ceil((ahora - inicioAnio) / (7 * 24 * 60 * 60 * 1000))
-  // Retornamos entre 1 y 13
-  return Math.min(Math.max(1, semanaAnio % 13 || 13), 13)
+// Calcula la semana actual (1-13) del periodo al que pertenece una asignación,
+// usando la fecha_inicio real del periodo configurado por el admin
+const calcularSemanaActual = async (id_asignacion) => {
+  const [rows] = await db.query(`
+    SELECT p.fecha_inicio, p.fecha_fin
+    FROM asignaciones a
+    JOIN periodos p ON a.id_periodo = p.id
+    WHERE a.id = ?
+  `, [id_asignacion])
+
+  if (rows.length === 0) return 1
+
+  const inicio = new Date(rows[0].fecha_inicio)
+  const hoy = new Date()
+  const diffDias = Math.floor((hoy - inicio) / (1000 * 60 * 60 * 24))
+
+  if (diffDias < 0) return 0 // el periodo aún no inicia
+  const semana = Math.floor(diffDias / 7) + 1
+  return Math.min(semana, 13)
 }
 
 const registrarAsistenciaDocente = async (req, res) => {
   const { id_asignacion, semana } = req.params
   const semanaNum = parseInt(semana)
-  const semanaActual = calcularSemanaActual()
+  const semanaActual = await calcularSemanaActual(id_asignacion)
 
-  if (semanaNum < 1 || semanaNum > 13) {
-    return res.status(400).json({ error: 'La semana debe estar entre 1 y 13' })
+  if (semanaActual === 0) {
+    return res.status(400).json({ error: 'El periodo aún no ha iniciado.' })
   }
 
   // Bloquear semanas futuras
@@ -171,7 +180,7 @@ const solicitarCorreccion = async (req, res) => {
   const { id_asignacion, semana } = req.params
   const { motivo } = req.body
   const semanaNum = parseInt(semana)
-  const semanaActual = calcularSemanaActual()
+  const semanaActual = await calcularSemanaActual(id_asignacion)
 
   if (semanaNum >= semanaActual) {
     return res.status(400).json({ error: 'Solo puedes solicitar corrección para semanas pasadas' })
