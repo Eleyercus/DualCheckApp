@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import Estudiantes from './Estudiantes'
 import Docentes from './Docentes'
 import Asignaciones from './Asignaciones'
+import Periodos from './Periodos'
 
 export default function AdminDashboard() {
   const { usuario, logout } = useAuth()
@@ -13,6 +14,7 @@ export default function AdminDashboard() {
   const handleLogout = () => { logout(); navigate('/') }
 
   const navItems = [
+    { key: 'periodos', label: 'Periodos', icon: 'ti-calendar-time' },
     { key: 'estudiantes', label: 'Estudiantes', icon: 'ti-users' },
     { key: 'docentes', label: 'Docentes', icon: 'ti-school' },
     { key: 'asignaciones', label: 'Asignaciones', icon: 'ti-link' },
@@ -102,6 +104,7 @@ export default function AdminDashboard() {
         </header>
 
         <main style={{ flex: 1, overflowY: 'auto', padding: '1.5rem' }}>
+          {seccion === 'periodos' && <Periodos />}
           {seccion === 'estudiantes' && <Estudiantes />}
           {seccion === 'docentes' && <Docentes />}
           {seccion === 'asignaciones' && <Asignaciones />}

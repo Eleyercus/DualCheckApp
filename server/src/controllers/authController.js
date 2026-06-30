@@ -56,7 +56,13 @@ const login = async (req, res) => {
       [usuario.id]
     )
 
-    // Generar JWT
+    // Generar JWT — el perfil estudiante expira por seguridad (tablet de uso
+    // compartido); docente y administrador no expiran, acceden desde sus
+    // propios dispositivos personales
+    const opcionesToken = usuario.perfil === 'estudiante'
+      ? { expiresIn: '15m' }
+      : {}
+
     const token = jwt.sign(
       {
         id: usuario.id,
@@ -64,7 +70,7 @@ const login = async (req, res) => {
         perfil: usuario.perfil
       },
       process.env.JWT_SECRET,
-      { expiresIn: '8h' }
+      opcionesToken
     )
 
     res.json({
