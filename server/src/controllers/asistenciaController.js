@@ -15,11 +15,13 @@ const getMisEstudiantes = async (req, res) => {
         e.id AS id_estudiante,
         e.matricula, e.nombre, e.apellido_p, e.apellido_m,
         e.grupo, e.carrera,
-        u.correo
+        u.correo,
+        p.nombre AS periodo_nombre
       FROM asignaciones a
       JOIN estudiantes e ON a.id_estudiante = e.id
       JOIN usuarios u ON e.id_usuario = u.id
-      WHERE a.id_docente = ? AND a.activa = 1
+      JOIN periodos p ON a.id_periodo = p.id
+      WHERE a.id_docente = ? AND a.estatus = 'activa'
       ORDER BY e.apellido_p, e.nombre
     `, [docente[0].id])
 
@@ -53,8 +55,8 @@ const validarAsignacion = async (req, res) => {
     )
 
     const [asignacion] = await db.query(
-      'SELECT id FROM asignaciones WHERE id = ? AND id_docente = ? AND activa = 1',
-      [id_asignacion, docente[0].id]
+      'SELECT id FROM asignaciones WHERE id = ? AND id_docente = ? AND estatus = ?',
+      [id_asignacion, docente[0].id, 'activa']
     )
     if (asignacion.length === 0) {
       return res.status(403).json({ error: 'No tienes permiso para validar esta asignación' })
@@ -131,8 +133,8 @@ const registrarAsistenciaDocente = async (req, res) => {
     )
 
     const [asignacion] = await db.query(
-      'SELECT id, validada_por_docente FROM asignaciones WHERE id = ? AND id_docente = ? AND activa = 1',
-      [id_asignacion, docente[0].id]
+      'SELECT id, validada_por_docente FROM asignaciones WHERE id = ? AND id_docente = ? AND estatus = ?',
+      [id_asignacion, docente[0].id, 'activa']
     )
     if (asignacion.length === 0) {
       return res.status(403).json({ error: 'No tienes permiso para registrar esta asistencia' })
@@ -200,7 +202,7 @@ const solicitarCorreccion = async (req, res) => {
       SELECT a.id, e.nombre AS est_nombre, e.apellido_p AS est_apellido_p, e.matricula
       FROM asignaciones a
       JOIN estudiantes e ON a.id_estudiante = e.id
-      WHERE a.id = ? AND a.id_docente = ? AND a.activa = 1
+      WHERE a.id = ? AND a.id_docente = ? AND a.estatus = 'activa'
     `, [id_asignacion, docente[0].id])
 
     if (asignacion.length === 0) {
@@ -330,8 +332,8 @@ const getAsistenciaEstudiante = async (req, res) => {
     if (estudiante.length === 0) return res.status(404).json({ error: 'Estudiante no encontrado' })
 
     const [asignacion] = await db.query(
-      'SELECT id, validada_por_docente FROM asignaciones WHERE id_estudiante = ? AND activa = 1',
-      [estudiante[0].id]
+      'SELECT id, validada_por_docente FROM asignaciones WHERE id_estudiante = ? AND estatus = ?',
+      [estudiante[0].id, 'activa']
     )
     if (asignacion.length === 0) return res.status(404).json({ error: 'No tienes asesor asignado' })
 
@@ -366,8 +368,8 @@ const confirmarAsistenciaEstudiante = async (req, res) => {
     )
 
     const [asignacion] = await db.query(
-      'SELECT id FROM asignaciones WHERE id = ? AND id_estudiante = ? AND activa = 1',
-      [id_asignacion, estudiante[0].id]
+      'SELECT id FROM asignaciones WHERE id = ? AND id_estudiante = ? AND estatus = ?',
+      [id_asignacion, estudiante[0].id, 'activa']
     )
     if (asignacion.length === 0) {
       return res.status(403).json({ error: 'No tienes permiso para confirmar esta asistencia' })

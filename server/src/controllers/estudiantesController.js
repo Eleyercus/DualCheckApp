@@ -46,19 +46,19 @@ const crearEstudiante = async (req, res) => {
   const {
     matricula, nombre, apellido_p, apellido_m, grupo, generacion,
     abrev_carrera, carrera, programa, telefono_celular, telefono_casa,
-    direccion, colonia, cp, sexo, correo,
+    direccion, colonia, cp, sexo, correo_personal,
     req_datos_estadia, req_carta_no_adeudo, req_carta_servicios,
     nombre_estadia, nombre_empresa, rfc, nombre_responsable,
     puesto_responsable, emp_direccion, emp_colonia, emp_cp,
     emp_telefono, emp_correo, giro, tamano, regimen_juridico
   } = req.body
 
-  if (!matricula || !nombre || !apellido_p || !correo) {
-    return res.status(400).json({ error: 'Matrícula, nombre, apellido paterno y correo son requeridos' })
+  if (!matricula || !nombre || !apellido_p || !correo_personal) {
+    return res.status(400).json({ error: 'Matrícula, nombre, apellido paterno y correo personal son requeridos' })
   }
 
   try {
-    const [existe] = await db.query('SELECT id FROM usuarios WHERE correo = ?', [correo])
+    const [existe] = await db.query('SELECT id FROM usuarios WHERE correo = ?', [correo_personal])
     if (existe.length > 0) return res.status(400).json({ error: 'El correo ya está registrado' })
 
     const password_hash = await bcrypt.hash(matricula, 10)
@@ -67,19 +67,19 @@ const crearEstudiante = async (req, res) => {
 
     try {
       const [usuarioResult] = await conn.query(
-        'INSERT INTO usuarios (correo, password_hash, perfil) VALUES (?, ?, ?)',
-        [correo, password_hash, 'estudiante']
+        'INSERT INTO usuarios (correo, password_hash, perfil, requiere_cambio_password) VALUES (?, ?, ?, ?)',
+        [correo_personal, password_hash, 'estudiante', 1]
       )
 
       const [estResult] = await conn.query(`
         INSERT INTO estudiantes 
-          (id_usuario, matricula, nombre, apellido_p, apellido_m, grupo, generacion,
+          (id_usuario, matricula, nombre, apellido_p, apellido_m, correo_personal, grupo, generacion,
            abrev_carrera, carrera, programa, telefono_celular, telefono_casa,
            direccion, colonia, cp, sexo,
            req_datos_estadia, req_carta_no_adeudo, req_carta_servicios)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
-        usuarioResult.insertId, matricula, nombre, apellido_p, apellido_m || null,
+        usuarioResult.insertId, matricula, nombre, apellido_p, apellido_m || null, correo_personal,
         grupo || null, generacion || null, abrev_carrera || null, carrera || null,
         programa || null, telefono_celular || null, telefono_casa || null,
         direccion || null, colonia || null, cp || null, sexo || null,
@@ -232,7 +232,7 @@ const cargaMasiva = async (req, res) => {
       const nombre = String(f['Nombre'] || '').trim()
       const apellido_p = String(f['Apellido P'] || f['ApellidoP'] || '').trim()
       const apellido_m = String(f['Apellido M'] || f['ApellidoM'] || '').trim()
-      const correo = String(f['Correo Electrónico'] || f['Correo'] || '').trim()
+      const correo_personal = String(f['Correo Personal'] || f['Correo'] || '').trim()
       const grupo = String(f['Grupo'] || '').trim()
       const generacion = String(f['GEN'] || f['Generacion'] || '').trim()
       const abrev_carrera = String(f['Abrev. carrera'] || f['AbrevCarrera'] || '').trim()
@@ -248,15 +248,15 @@ const cargaMasiva = async (req, res) => {
       const req_carta_no_adeudo = f['Carta N/A o Convenio'] ? 1 : 0
       const req_carta_servicios = f['Carta Servicios Escolares'] ? 1 : 0
 
-      if (!matricula || !nombre || !apellido_p || !correo) {
-        resultados.errores.push({ fila: i + 2, mensaje: 'Faltan campos requeridos (Matrícula, Nombre, Apellido P, Correo)' })
+      if (!matricula || !nombre || !apellido_p || !correo_personal) {
+        resultados.errores.push({ fila: i + 2, mensaje: 'Faltan campos requeridos (Matrícula, Nombre, Apellido P, Correo Personal)' })
         continue
       }
 
       try {
-        const [existe] = await db.query('SELECT id FROM usuarios WHERE correo = ?', [correo])
+        const [existe] = await db.query('SELECT id FROM usuarios WHERE correo = ?', [correo_personal])
         if (existe.length > 0) {
-          resultados.errores.push({ fila: i + 2, mensaje: `Correo ${correo} ya registrado` })
+          resultados.errores.push({ fila: i + 2, mensaje: `Correo ${correo_personal} ya registrado` })
           continue
         }
 
@@ -266,19 +266,19 @@ const cargaMasiva = async (req, res) => {
 
         try {
           const [usuarioResult] = await conn.query(
-            'INSERT INTO usuarios (correo, password_hash, perfil) VALUES (?, ?, ?)',
-            [correo, password_hash, 'estudiante']
+            'INSERT INTO usuarios (correo, password_hash, perfil, requiere_cambio_password) VALUES (?, ?, ?, ?)',
+            [correo_personal, password_hash, 'estudiante', 1]
           )
 
           await conn.query(`
             INSERT INTO estudiantes
-              (id_usuario, matricula, nombre, apellido_p, apellido_m, grupo, generacion,
+              (id_usuario, matricula, nombre, apellido_p, apellido_m, correo_personal, grupo, generacion,
                abrev_carrera, carrera, programa, telefono_celular, telefono_casa,
                direccion, colonia, cp, sexo,
                req_datos_estadia, req_carta_no_adeudo, req_carta_servicios)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `, [
-            usuarioResult.insertId, matricula, nombre, apellido_p, apellido_m || null,
+            usuarioResult.insertId, matricula, nombre, apellido_p, apellido_m || null, correo_personal,
             grupo || null, generacion || null, abrev_carrera || null, carrera || null,
             programa || null, telefono_celular || null, telefono_casa || null,
             direccion || null, colonia || null, cp || null,

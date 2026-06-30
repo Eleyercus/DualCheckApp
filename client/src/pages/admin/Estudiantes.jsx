@@ -21,7 +21,7 @@ const FORM_INICIAL = {
   matricula: '', nombre: '', apellido_p: '', apellido_m: '',
   grupo: '', generacion: '', abrev_carrera: '', carrera: '',
   programa: '', telefono_celular: '', telefono_casa: '',
-  direccion: '', colonia: '', cp: '', sexo: '', correo: '',
+  direccion: '', colonia: '', cp: '', sexo: '', correo_personal: '',
   req_datos_estadia: false, req_carta_no_adeudo: false, req_carta_servicitos: false,
   nombre_estadia: '', nombre_empresa: '', rfc: '', nombre_responsable: '',
   puesto_responsable: '', emp_direccion: '', emp_colonia: '', emp_cp: '',
@@ -65,7 +65,7 @@ function DetalleEstudiante({ estudiante: e, onVolver, onActualizarRequisitos, on
           </h3>
           {[
             ['Matrícula', e.matricula],
-            ['Correo', e.correo],
+            ['Correo personal', e.correo_personal || e.correo],
             ['Carrera', e.carrera || '—'],
             ['Grupo', e.grupo || '—'],
             ['Generación', e.generacion || '—'],
@@ -309,7 +309,7 @@ export default function Estudiantes() {
             <div className="form-grid">
               {[
                 { key: 'matricula', label: 'Matrícula *', req: true },
-                { key: 'correo', label: 'Correo institucional *', req: true },
+                { key: 'correo_personal', label: 'Correo personal *', req: true },
                 { key: 'nombre', label: 'Nombre(s) *', req: true },
                 { key: 'apellido_p', label: 'Apellido paterno *', req: true },
                 { key: 'apellido_m', label: 'Apellido materno' },
@@ -328,6 +328,7 @@ export default function Estudiantes() {
                   <label className="form-label">{label}</label>
                   <input className="form-input" value={form[key]}
                     onChange={e => setForm({ ...form, [key]: e.target.value })}
+                    placeholder={key === 'correo_personal' ? 'alumno@gmail.com' : ''}
                     required={!!req} />
                 </div>
               ))}
@@ -483,7 +484,7 @@ export default function Estudiantes() {
           Carga masiva desde Excel
         </h3>
         <p style={{ fontSize: '11px', color: 'var(--texto-muted)', marginBottom: '10px' }}>
-          Columnas: <strong>Matrícula, Nombre, Apellido P, Apellido M, Correo Electrónico, Grupo, GEN, Abrev. carrera, Carrera, Tel. Celular, Datos Estadías, Carta N/A o Convenio, Carta Servicios Escolares</strong>
+          Columnas: <strong>Matrícula, Nombre, Apellido P, Apellido M, Correo Personal, Grupo, GEN, Abrev. carrera, Carrera, Tel. Celular, Datos Estadías, Carta N/A o Convenio, Carta Servicios Escolares</strong>
         </p>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <input type="file" accept=".xlsx,.csv"

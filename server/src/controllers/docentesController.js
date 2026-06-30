@@ -42,9 +42,9 @@ const crearDocente = async (req, res) => {
 
     try {
       const [usuarioResult] = await conn.query(
-        'INSERT INTO usuarios (correo, password_hash, perfil) VALUES (?, ?, ?)',
-        [correo, password_hash, 'docente']
-      )
+      'INSERT INTO usuarios (correo, password_hash, perfil, requiere_cambio_password) VALUES (?, ?, ?, ?)',
+      [correo, password_hash, 'docente', 1]
+    )
 
       await conn.query(
         'INSERT INTO docentes (id_usuario, nombre, apellido_p, apellido_m, programa_educativo) VALUES (?, ?, ?, ?, ?)',
