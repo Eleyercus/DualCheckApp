@@ -17,7 +17,7 @@ export default function Login() {
     setCargando(true)
     try {
       const res = await api.post('/auth/login', { correo, password })
-      login(res.data.token, res.data.perfil, correo)
+      await login(res.data.token, res.data.perfil, correo)
       if (res.data.perfil === 'administrador') navigate('/admin')
       else if (res.data.perfil === 'docente') navigate('/docente')
       else if (res.data.perfil === 'estudiante') navigate('/estudiante')

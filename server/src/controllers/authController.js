@@ -76,7 +76,8 @@ const login = async (req, res) => {
     res.json({
       mensaje: 'Login exitoso',
       token,
-      perfil: usuario.perfil
+      perfil: usuario.perfil,
+      requiere_cambio_password: usuario.requiere_cambio_password === 1
     })
 
   } catch (error) {
@@ -85,4 +86,66 @@ const login = async (req, res) => {
   }
 }
 
-module.exports = { login }
+// Cambiar contraseña (primer login obligatorio o voluntario)
+const cambiarPassword = async (req, res) => {
+  const { password_actual, password_nueva, password_confirmacion } = req.body
+
+  if (!password_actual || !password_nueva || !password_confirmacion) {
+    return res.status(400).json({ error: 'Todos los campos son requeridos' })
+  }
+
+  if (password_nueva !== password_confirmacion) {
+    return res.status(400).json({ error: 'La nueva contraseña y su confirmación no coinciden' })
+  }
+
+  if (password_nueva.length < 6) {
+    return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 6 caracteres' })
+  }
+
+  if (password_nueva === password_actual) {
+    return res.status(400).json({ error: 'La nueva contraseña debe ser diferente a la actual' })
+  }
+
+  try {
+    const [rows] = await db.query('SELECT * FROM usuarios WHERE id = ?', [req.usuario.id])
+    if (rows.length === 0) return res.status(404).json({ error: 'Usuario no encontrado' })
+
+    const usuario = rows[0]
+    const passwordValida = await bcrypt.compare(password_actual, usuario.password_hash)
+    if (!passwordValida) {
+      return res.status(401).json({ error: 'La contraseña actual es incorrecta' })
+    }
+
+    const nuevo_hash = await bcrypt.hash(password_nueva, 10)
+    await db.query(
+      'UPDATE usuarios SET password_hash = ?, requiere_cambio_password = 0 WHERE id = ?',
+      [nuevo_hash, req.usuario.id]
+    )
+
+    await db.query(
+      'INSERT INTO bitacora (id_usuario, accion, entidad_afectada, detalle) VALUES (?, ?, ?, ?)',
+      [req.usuario.id, 'CAMBIO_PASSWORD', 'usuarios', 'El usuario cambió su contraseña']
+    )
+
+    res.json({ mensaje: 'Contraseña actualizada correctamente' })
+  } catch (error) {
+    console.error('Error cambiando contraseña:', error)
+    res.status(500).json({ error: 'Error interno del servidor' })
+  }
+}
+
+// Verificar si el usuario requiere cambio de contraseña
+const verificarRequiereCambio = async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      'SELECT requiere_cambio_password FROM usuarios WHERE id = ?',
+      [req.usuario.id]
+    )
+    res.json({ requiere_cambio: rows[0]?.requiere_cambio_password === 1 })
+  } catch (error) {
+    console.error('Error verificando cambio:', error)
+    res.status(500).json({ error: 'Error interno del servidor' })
+  }
+}
+
+module.exports = { login, cambiarPassword, verificarRequiereCambio }
