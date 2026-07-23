@@ -5,6 +5,7 @@ import Estudiantes from './Estudiantes'
 import Docentes from './Docentes'
 import Asignaciones from './Asignaciones'
 import Periodos from './Periodos'
+import Reportes from './Reportes'
 
 export default function AdminDashboard() {
   const { usuario, logout } = useAuth()
@@ -114,12 +115,7 @@ export default function AdminDashboard() {
               <p style={{ fontSize: '14px' }}>Módulo de asistencia — disponible próximamente</p>
             </div>
           )}
-          {seccion === 'reportes' && (
-            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--texto-muted)' }}>
-              <i className="ti ti-chart-bar" style={{ fontSize: '48px', display: 'block', marginBottom: '1rem' }} />
-              <p style={{ fontSize: '14px' }}>Módulo de reportes — disponible próximamente</p>
-            </div>
-          )}
+          {seccion === 'reportes' && <Reportes />}
         </main>
       </div>
     </div>
