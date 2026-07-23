@@ -9,7 +9,7 @@ const {
 } = require('../controllers/periodosController')
 
 router.get('/', verificarToken, soloAdmin, getPeriodos)
-router.get('/activo', verificarToken, soloAdmin, getPeriodoActivo)
+router.get('/activo', verificarToken, getPeriodoActivo)
 router.post('/', verificarToken, soloAdmin, crearPeriodo)
 router.patch('/:id/estatus', verificarToken, soloAdmin, cambiarEstatusPeriodo)
 

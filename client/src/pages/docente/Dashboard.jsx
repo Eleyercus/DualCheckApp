@@ -16,10 +16,18 @@ function PanelAsistencia({ asignacion, onVolver }) {
   const [enviandoSolicitud, setEnviandoSolicitud] = useState(false)
 
   const semanaActual = (() => {
-    const ahora = new Date()
-    const inicioAnio = new Date(ahora.getFullYear(), 0, 1)
-    const semanaAnio = Math.ceil((ahora - inicioAnio) / (7 * 24 * 60 * 60 * 1000))
-    return Math.min(Math.max(1, semanaAnio % 13 || 13), 13)
+    if (!asignacion?.fecha_inicio) return 1
+    const partes = String(asignacion.fecha_inicio).substring(0, 10).split('-')
+    const inicio = new Date(
+      parseInt(partes[0]),
+      parseInt(partes[1]) - 1,
+      parseInt(partes[2])
+    )
+    const hoy = new Date()
+    hoy.setHours(0, 0, 0, 0)
+    const diff = Math.floor((hoy - inicio) / (1000 * 60 * 60 * 24))
+    if (diff < 0) return 0
+    return Math.min(Math.floor(diff / 7) + 1, 13)
   })()
 
   useEffect(() => { cargarAsistencia() }, [])
@@ -88,6 +96,23 @@ function PanelAsistencia({ asignacion, onVolver }) {
           </p>
         </div>
       </div>
+
+      {/* Info del periodo y semana */}
+      {asignacion.periodo_nombre && (
+        <div style={{
+          background: '#f0fdf4', border: '1px solid #86efac',
+          borderRadius: '8px', padding: '10px 16px',
+          marginBottom: '1.25rem', display: 'flex',
+          justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px'
+        }}>
+          <span style={{ fontSize: '13px', color: 'var(--verde-oscuro)', fontWeight: '600' }}>
+            📅 {asignacion.periodo_nombre}
+          </span>
+          <span style={{ fontSize: '12px', color: 'var(--verde)' }}>
+            Semana actual del periodo: <strong>{semanaActual}</strong>
+          </span>
+        </div>
+      )}
 
       {/* Estadísticas */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '1.25rem' }}>
@@ -272,6 +297,7 @@ export default function DocenteDashboard() {
   const { usuario, logout } = useAuth()
   const navigate = useNavigate()
   const [estudiantes, setEstudiantes] = useState([])
+  const [periodo, setPeriodo] = useState(null)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
   const [mensaje, setMensaje] = useState('')
@@ -283,8 +309,12 @@ export default function DocenteDashboard() {
   const cargar = async () => {
     try {
       setCargando(true)
-      const res = await api.get('/asistencia/mis-estudiantes')
-      setEstudiantes(res.data)
+      const [resEst, resPer] = await Promise.all([
+        api.get('/asistencia/mis-estudiantes'),
+        api.get('/periodos/activo'),
+      ])
+      setEstudiantes(resEst.data)
+      setPeriodo(resPer.data)
     } catch { setError('Error cargando tus estudiantes') }
     finally { setCargando(false) }
   }
@@ -385,6 +415,32 @@ export default function DocenteDashboard() {
               Valida tus asignaciones y registra la asistencia semanal
             </p>
           </div>
+
+          {/* Banner periodo activo */}
+          {periodo && (
+            <div style={{
+              background: 'var(--verde)', borderRadius: '8px',
+              padding: '10px 16px', marginBottom: '1.25rem',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              flexWrap: 'wrap', gap: '8px'
+            }}>
+              <div>
+                <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Periodo activo
+                </span>
+                <p style={{ fontSize: '14px', fontWeight: '700', color: '#fff', margin: '2px 0 0' }}>
+                  {periodo.nombre}
+                </p>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', margin: 0 }}>
+                  {new Date(periodo.fecha_inicio.substring(0,10)).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })}
+                  {' — '}
+                  {new Date(periodo.fecha_fin.substring(0,10)).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })}
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Estadísticas */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '1.25rem' }}>

@@ -7,6 +7,7 @@ const BADGE = {
 }
 
 export default function Asignaciones() {
+  const [periodo, setPeriodo] = useState(null)
   const [asignaciones, setAsignaciones] = useState([])
   const [sinAsesor, setSinAsesor] = useState([])
   const [docentes, setDocentes] = useState([])
@@ -22,14 +23,16 @@ export default function Asignaciones() {
   const cargarTodo = async () => {
     try {
       setCargando(true)
-      const [resA, resSin, resD] = await Promise.all([
+      const [resA, resSin, resD, resPer] = await Promise.all([
         api.get('/asignaciones'),
         api.get('/asignaciones/sin-asesor'),
         api.get('/asignaciones/docentes-activos'),
+        api.get('/periodos/activo').catch(() => ({ data: null })),
       ])
       setAsignaciones(resA.data)
       setSinAsesor(resSin.data)
       setDocentes(resD.data)
+      setPeriodo(resPer.data)
     } catch { setError('Error cargando datos de asignaciones') }
     finally { setCargando(false) }
   }
@@ -106,6 +109,36 @@ export default function Asignaciones() {
           </div>
         ))}
       </div>
+
+      {/* Banner periodo activo */}
+      {periodo ? (
+        <div style={{
+          background: 'var(--verde)', borderRadius: '8px',
+          padding: '10px 16px', marginBottom: '1.25rem',
+          display: 'flex', justifyContent: 'space-between',
+          alignItems: 'center', flexWrap: 'wrap', gap: '8px'
+        }}>
+          <div>
+            <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Asignando al periodo
+            </span>
+            <p style={{ fontSize: '14px', fontWeight: '700', color: '#fff', margin: '2px 0 0' }}>
+              {periodo.nombre}
+            </p>
+          </div>
+          <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', margin: 0 }}>
+            {new Date(periodo.fecha_inicio.substring(0,10)).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })}
+            {' — '}
+            {new Date(periodo.fecha_fin.substring(0,10)).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })}
+          </p>
+        </div>
+      ) : (
+        <div className="card" style={{ borderLeft: '4px solid #dc2626', borderRadius: '0 8px 8px 0', marginBottom: '1.25rem' }}>
+          <p style={{ fontSize: '13px', fontWeight: '600', color: '#991b1b' }}>
+            No hay periodo activo — las asignaciones nuevas requieren un periodo activo.
+          </p>
+        </div>
+      )}
 
       {mensaje && <div className="alerta-exito">{mensaje}</div>}
       {error && <div className="alerta-error">{error}</div>}

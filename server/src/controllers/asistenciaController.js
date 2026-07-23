@@ -16,7 +16,8 @@ const getMisEstudiantes = async (req, res) => {
         e.matricula, e.nombre, e.apellido_p, e.apellido_m,
         e.grupo, e.carrera,
         u.correo,
-        p.nombre AS periodo_nombre
+        p.nombre AS periodo_nombre,
+        p.fecha_inicio
       FROM asignaciones a
       JOIN estudiantes e ON a.id_estudiante = e.id
       JOIN usuarios u ON e.id_usuario = u.id
@@ -92,11 +93,23 @@ const calcularSemanaActual = async (id_asignacion) => {
 
   if (rows.length === 0) return 1
 
-  const inicio = new Date(rows[0].fecha_inicio)
-  const hoy = new Date()
-  const diffDias = Math.floor((hoy - inicio) / (1000 * 60 * 60 * 24))
+  // Parsear fecha sin desfase de zona horaria
+  const fechaStr = rows[0].fecha_inicio.toISOString
+    ? rows[0].fecha_inicio.toISOString().substring(0, 10)
+    : String(rows[0].fecha_inicio).substring(0, 10)
 
-  if (diffDias < 0) return 0 // el periodo aún no inicia
+  const partes = fechaStr.split('-')
+  const inicio = new Date(
+    parseInt(partes[0]),
+    parseInt(partes[1]) - 1,
+    parseInt(partes[2])
+  )
+
+  const hoy = new Date()
+  hoy.setHours(0, 0, 0, 0)
+
+  const diffDias = Math.floor((hoy - inicio) / (1000 * 60 * 60 * 24))
+  if (diffDias < 0) return 0
   const semana = Math.floor(diffDias / 7) + 1
   return Math.min(semana, 13)
 }
@@ -331,11 +344,18 @@ const getAsistenciaEstudiante = async (req, res) => {
     )
     if (estudiante.length === 0) return res.status(404).json({ error: 'Estudiante no encontrado' })
 
-    const [asignacion] = await db.query(
-      'SELECT id, validada_por_docente FROM asignaciones WHERE id_estudiante = ? AND estatus = ?',
-      [estudiante[0].id, 'activa']
-    )
-    if (asignacion.length === 0) return res.status(404).json({ error: 'No tienes asesor asignado' })
+    const [asignacion] = await db.query(`
+      SELECT a.id, a.validada_por_docente, p.fecha_inicio, p.nombre AS periodo_nombre,
+             d.nombre AS doc_nombre, d.apellido_p AS doc_apellido_p
+      FROM asignaciones a
+      JOIN periodos p ON a.id_periodo = p.id
+      JOIN docentes d ON a.id_docente = d.id
+      WHERE a.id_estudiante = ? AND a.estatus = 'activa'
+    `, [estudiante[0].id])
+
+    if (asignacion.length === 0) {
+      return res.status(404).json({ error: 'No tienes asesor asignado en el periodo activo' })
+    }
 
     const [asistencia] = await db.query(
       'SELECT * FROM asistencia WHERE id_asignacion = ? ORDER BY semana',
@@ -345,6 +365,9 @@ const getAsistenciaEstudiante = async (req, res) => {
     res.json({
       id_asignacion: asignacion[0].id,
       validada_por_docente: asignacion[0].validada_por_docente,
+      fecha_inicio: asignacion[0].fecha_inicio,
+      periodo_nombre: asignacion[0].periodo_nombre,
+      docente: `${asignacion[0].doc_nombre} ${asignacion[0].doc_apellido_p}`,
       asistencia
     })
   } catch (error) {
