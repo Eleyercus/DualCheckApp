@@ -1,7 +1,10 @@
 import axios from 'axios'
 
+// En desarrollo usa localhost. En producción, define VITE_API_URL en un
+// archivo .env.production (ver .env.example) con la IP real del servidor,
+// por ejemplo: VITE_API_URL=http://192.168.1.10:3001/api
 const api = axios.create({
-  baseURL: 'http://localhost:3001/api',
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3001/api',
 })
 
 api.interceptors.request.use((config) => {
