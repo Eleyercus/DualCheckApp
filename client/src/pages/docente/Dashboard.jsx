@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'
+import { useFiltro } from '../../hooks/useFiltro'
+import BarraFiltros, { SinResultadosFiltro } from '../../components/BarraFiltros'
 
 const SEMANAS = Array.from({ length: 13 }, (_, i) => i + 1)
 
@@ -334,6 +336,26 @@ export default function DocenteDashboard() {
 
   const noValidadas = estudiantes.filter(e => !e.validada_por_docente).length
 
+  // ── Búsqueda y filtros de "Mis estudiantes" ──────────────────────────────
+  const {
+    query, setQuery, valoresFiltro, setFiltro, limpiar: limpiarFiltros,
+    resultado: estudiantesFiltrados, hayFiltrosActivos, total, totalFiltrado
+  } = useFiltro(estudiantes, {
+    buscarEn: e => `${e.nombre} ${e.apellido_p} ${e.apellido_m} ${e.matricula} ${e.grupo || ''} ${e.carrera || ''}`,
+    filtros: {
+      validacion: (e, v) => v === 'validadas' ? !!e.validada_por_docente : !e.validada_por_docente,
+    }
+  })
+
+  const definicionFiltros = [
+    {
+      clave: 'validacion', label: 'Validación', opciones: [
+        { value: 'validadas', label: 'Validadas' },
+        { value: 'pendientes', label: 'Pendientes' },
+      ]
+    },
+  ]
+
   if (estudianteActivo) return (
     <div style={{ display: 'flex', minHeight: '100vh', background: '#F4F6F4' }}>
       <aside style={{ width: '220px', background: 'var(--verde)', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
@@ -442,14 +464,18 @@ export default function DocenteDashboard() {
             </div>
           )}
 
-          {/* Estadísticas */}
+          {/* Estadísticas — también funcionan como accesos rápidos de filtro */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '1.25rem' }}>
             {[
-              { label: 'Estudiantes asignados', valor: estudiantes.length, color: 'var(--verde)' },
-              { label: 'Asignaciones validadas', valor: estudiantes.filter(e => e.validada_por_docente).length, color: 'var(--naranja)' },
-              { label: 'Pendientes de validar', valor: noValidadas, color: noValidadas > 0 ? '#dc2626' : 'var(--texto-muted)' },
+              { label: 'Estudiantes asignados', valor: estudiantes.length, color: 'var(--verde)', onClick: limpiarFiltros, activa: !hayFiltrosActivos },
+              { label: 'Asignaciones validadas', valor: estudiantes.filter(e => e.validada_por_docente).length, color: 'var(--naranja)', onClick: () => setFiltro('validacion', 'validadas'), activa: valoresFiltro.validacion === 'validadas' },
+              { label: 'Pendientes de validar', valor: noValidadas, color: noValidadas > 0 ? '#dc2626' : 'var(--texto-muted)', onClick: () => setFiltro('validacion', 'pendientes'), activa: valoresFiltro.validacion === 'pendientes' },
             ].map(s => (
-              <div key={s.label} className="card" style={{ padding: '1rem', borderTop: `3px solid ${s.color}`, marginBottom: 0 }}>
+              <div key={s.label}
+                className={`card stat-card-clicable ${s.activa ? 'activa' : ''}`}
+                style={{ padding: '1rem', borderTop: `3px solid ${s.color}`, marginBottom: 0 }}
+                onClick={s.onClick}
+                title="Clic para filtrar la lista">
                 <div style={{ fontSize: '1.6rem', fontWeight: '700', color: s.color }}>{s.valor}</div>
                 <div style={{ fontSize: '11px', color: 'var(--texto-muted)', marginTop: '2px' }}>{s.label}</div>
               </div>
@@ -470,6 +496,18 @@ export default function DocenteDashboard() {
             </div>
           )}
 
+          {/* Búsqueda y filtros */}
+          {!cargando && estudiantes.length > 0 && (
+            <BarraFiltros
+              query={query} onQuery={setQuery}
+              placeholder="Buscar por nombre, matrícula, grupo o carrera..."
+              filtros={definicionFiltros}
+              valoresFiltro={valoresFiltro} onFiltro={setFiltro}
+              onLimpiar={limpiarFiltros} hayFiltrosActivos={hayFiltrosActivos}
+              total={total} totalFiltrado={totalFiltrado}
+            />
+          )}
+
           {cargando ? (
             <p style={{ textAlign: 'center', color: 'var(--texto-muted)', padding: '2rem' }}>Cargando...</p>
           ) : estudiantes.length === 0 ? (
@@ -477,9 +515,13 @@ export default function DocenteDashboard() {
               <i className="ti ti-users" style={{ fontSize: '48px', color: 'var(--texto-muted)', display: 'block', marginBottom: '1rem' }} aria-hidden="true" />
               <p style={{ color: 'var(--texto-muted)', fontSize: '14px' }}>No tienes estudiantes asignados aún.</p>
             </div>
+          ) : estudiantesFiltrados.length === 0 ? (
+            <div className="card">
+              <SinResultadosFiltro onLimpiar={limpiarFiltros} />
+            </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {estudiantes.map(est => (
+              {estudiantesFiltrados.map(est => (
                 <div key={est.id_asignacion} className="card" style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                   borderLeft: `4px solid ${est.validada_por_docente ? 'var(--verde)' : 'var(--dorado)'}`,

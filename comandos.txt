@@ -1,6 +1,120 @@
-//comando para correr base de datos//
+// ==========================================================
+// DUALCHECK APP - COMANDOS BASICOS
+// ==========================================================
+
+// ---------------- BASE DE DATOS ----------------
+// Entrar a MySQL y seleccionar la base de datos
 mysql -u root -p dualcheck_db
 
-//comando para correr server en consola//
+// Comandos utiles dentro de MySQL
+SHOW DATABASES;
+USE dualcheck_db;
+SHOW TABLES;
+DESCRIBE nombre_tabla;
+EXIT;
+
+// ---------------- SERVIDOR ----------------
+// Instalar dependencias del servidor
+cd server
+pnpm install
+
+// Correr servidor en desarrollo (reinicia con los cambios)
 cd server
 pnpm dev
+
+// Correr servidor en produccion
+cd server
+pnpm start
+
+// ---------------- CLIENTE ----------------
+// Instalar dependencias del cliente
+cd client
+pnpm install
+
+// Correr cliente en desarrollo
+cd client
+pnpm dev
+
+// Revisar errores de ESLint
+cd client
+pnpm lint
+
+// Crear compilacion de produccion
+cd client
+pnpm build
+
+// ---------------- INSTALACION GENERAL ----------------
+// Instalar dependencias usando el pnpm-lock.yaml existente
+pnpm install
+
+// Ver version de Node y pnpm
+node --version
+pnpm --version
+
+// ---------------- GIT / GITHUB ----------------
+// Ver estado y cambios del proyecto
+git status
+git diff
+
+// Preparar todos los archivos para el commit
+git add .
+
+// Preparar un archivo especifico
+git add ruta/al/archivo
+
+// Crear un commit; escribe un mensaje corto y claro
+git commit -m "Describe brevemente el cambio"
+
+// Enviar cambios a GitHub
+git push
+
+// Flujo completo para subir cambios
+git status
+git add .
+git commit -m "Describe brevemente el cambio"
+git push origin main
+
+// Descargar cambios de GitHub antes de trabajar
+git pull origin main
+
+// Ver commits recientes
+git log --oneline --decorate --graph -10
+
+// Ver ramas y cambiar de rama
+git branch
+git switch nombre-de-la-rama
+
+// Crear y cambiar a una rama nueva
+git switch -c nombre-de-la-rama
+
+// Guardar cambios temporalmente sin hacer commit
+git stash
+git stash pop
+
+// Configurar Git una sola vez en el equipo
+git config --global user.name "Tu nombre"
+git config --global user.email "tu-correo@ejemplo.com"
+
+// ---------------- COMENTARIOS EN EL CODIGO ----------------
+// Comentario de una linea en JavaScript, JSX y SQL
+// Este comentario explica una decision o regla importante
+
+/*
+	Comentario de varias lineas.
+	Usarlo solo cuando el bloque necesite contexto adicional.
+*/
+
+// Comentario dentro de JSX: debe usar llaves
+{/* Comentario visible solo para quien lee el codigo */}
+
+// ---------------- COMANDOS DE AYUDA ----------------
+// Ver ayuda de cualquier comando
+git --help
+pnpm --help
+
+// Limpiar la terminal
+cls
+
+// Detener un servidor o proceso en la terminal
+Ctrl + C
+

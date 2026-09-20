@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
+import { useFiltro } from '../../hooks/useFiltro'
+import BarraFiltros, { SinResultadosFiltro } from '../../components/BarraFiltros'
 
 const TABS = ['datos', 'requisitos', 'empresa']
 const TAB_LABELS = { datos: 'Datos personales', requisitos: 'Requisitos', empresa: 'Datos de estadía' }
@@ -257,6 +259,46 @@ export default function Estudiantes() {
   const activos = estudiantes.filter(e => e.estatus && e.estatus_especial === 'activo').length
   const sinRequisitos = estudiantes.filter(e => e.estatus && !cumpleRequisitos(e)).length
 
+  // ── Búsqueda y filtros de la tabla ──────────────────────────────────────
+  const carrerasUnicas = Array.from(new Set(
+    estudiantes.map(e => e.carrera || e.programa).filter(Boolean)
+  )).sort((a, b) => a.localeCompare(b, 'es'))
+  const gruposUnicos = Array.from(new Set(
+    estudiantes.map(e => e.grupo).filter(Boolean)
+  )).sort((a, b) => a.localeCompare(b, 'es'))
+
+  const {
+    query, setQuery, valoresFiltro, setFiltro, limpiar: limpiarFiltros,
+    resultado: estudiantesFiltrados, hayFiltrosActivos, total, totalFiltrado
+  } = useFiltro(estudiantes, {
+    buscarEn: e => `${e.matricula} ${e.nombre} ${e.apellido_p} ${e.apellido_m} ${e.correo_personal || e.correo || ''} ${e.carrera || e.programa || ''} ${e.grupo || ''}`,
+    filtros: {
+      carrera: (e, v) => (e.carrera || e.programa) === v,
+      grupo: (e, v) => e.grupo === v,
+      estatus: (e, v) => (e.estatus_especial || 'activo') === v,
+      requisitos: (e, v) => v === 'completos' ? cumpleRequisitos(e) : !cumpleRequisitos(e),
+    }
+  })
+
+  const definicionFiltros = [
+    { clave: 'carrera', label: 'Carrera', opciones: carrerasUnicas.map(c => ({ value: c, label: c })) },
+    { clave: 'grupo', label: 'Grupo', opciones: gruposUnicos.map(g => ({ value: g, label: g })) },
+    {
+      clave: 'estatus', label: 'Estatus', opciones: [
+        { value: 'activo', label: 'Activo' },
+        { value: 'baja', label: 'Baja' },
+        { value: 'baja_reprobacion', label: 'Baja por reprobación' },
+        { value: 'reincorporado', label: 'Reincorporado' },
+      ]
+    },
+    {
+      clave: 'requisitos', label: 'Requisitos', opciones: [
+        { value: 'completos', label: 'Completos' },
+        { value: 'incompletos', label: 'Incompletos' },
+      ]
+    },
+  ]
+
   // ── Vista: detalle ────────────────────────────────────────────────────────
   if (vista === 'detalle' && estudianteDetalle) {
     return (
@@ -460,15 +502,19 @@ export default function Estudiantes() {
         </button>
       </div>
 
-      {/* Estadísticas */}
+      {/* Estadísticas — también funcionan como accesos rápidos de filtro */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '1.25rem' }}>
         {[
-          { label: 'Total registrados', valor: estudiantes.length, color: 'var(--verde)' },
-          { label: 'Activos', valor: activos, color: 'var(--naranja)' },
-          { label: 'Sin requisitos completos', valor: sinRequisitos, color: sinRequisitos > 0 ? '#dc2626' : 'var(--texto-muted)' },
-          { label: 'Con baja', valor: estudiantes.filter(e => e.estatus_especial?.includes('baja')).length, color: 'var(--dorado)' },
+          { label: 'Total registrados', valor: estudiantes.length, color: 'var(--verde)', onClick: limpiarFiltros, activa: !hayFiltrosActivos },
+          { label: 'Activos', valor: activos, color: 'var(--naranja)', onClick: () => setFiltro('estatus', 'activo'), activa: valoresFiltro.estatus === 'activo' },
+          { label: 'Sin requisitos completos', valor: sinRequisitos, color: sinRequisitos > 0 ? '#dc2626' : 'var(--texto-muted)', onClick: () => setFiltro('requisitos', 'incompletos'), activa: valoresFiltro.requisitos === 'incompletos' },
+          { label: 'Con baja', valor: estudiantes.filter(e => e.estatus_especial?.includes('baja')).length, color: 'var(--dorado)', onClick: () => setFiltro('estatus', 'baja'), activa: valoresFiltro.estatus === 'baja' },
         ].map(s => (
-          <div key={s.label} className="card" style={{ padding: '1rem', borderTop: `3px solid ${s.color}`, marginBottom: 0 }}>
+          <div key={s.label}
+            className={`card stat-card-clicable ${s.activa ? 'activa' : ''}`}
+            style={{ padding: '1rem', borderTop: `3px solid ${s.color}`, marginBottom: 0 }}
+            onClick={s.onClick}
+            title="Clic para filtrar la tabla">
             <div style={{ fontSize: '1.6rem', fontWeight: '700', color: s.color }}>{s.valor}</div>
             <div style={{ fontSize: '11px', color: 'var(--texto-muted)', marginTop: '2px' }}>{s.label}</div>
           </div>
@@ -496,6 +542,18 @@ export default function Estudiantes() {
         </div>
       </div>
 
+      {/* Búsqueda y filtros */}
+      {estudiantes.length > 0 && (
+        <BarraFiltros
+          query={query} onQuery={setQuery}
+          placeholder="Buscar por nombre, matrícula, correo, carrera o grupo..."
+          filtros={definicionFiltros}
+          valoresFiltro={valoresFiltro} onFiltro={setFiltro}
+          onLimpiar={limpiarFiltros} hayFiltrosActivos={hayFiltrosActivos}
+          total={total} totalFiltrado={totalFiltrado}
+        />
+      )}
+
       {/* Tabla */}
       <div className="card" style={{ padding: '0', overflow: 'hidden' }}>
         {cargando ? (
@@ -504,6 +562,8 @@ export default function Estudiantes() {
           <p style={{ padding: '2rem', textAlign: 'center', color: 'var(--texto-muted)' }}>
             No hay estudiantes registrados aún.
           </p>
+        ) : estudiantesFiltrados.length === 0 ? (
+          <SinResultadosFiltro onLimpiar={limpiarFiltros} />
         ) : (
           <div className="tabla-wrapper">
             <table className="tabla">
@@ -515,7 +575,7 @@ export default function Estudiantes() {
                 </tr>
               </thead>
               <tbody>
-                {estudiantes.map(e => {
+                {estudiantesFiltrados.map(e => {
                   const reqs = [e.req_datos_estadia, e.req_carta_no_adeudo, e.req_carta_servicios]
                   const completados = reqs.filter(Boolean).length
                   return (

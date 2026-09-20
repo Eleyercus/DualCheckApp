@@ -158,3 +158,119 @@ button { font-family: inherit; cursor: pointer; }
 }
 .form-input:focus { outline: none; border-color: var(--verde); }
 .form-input::placeholder { color: #d1d5db; }
+
+/* ─── Barra de búsqueda y filtros ────────────────────────────────────────── */
+.barra-herramientas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 1rem;
+}
+
+.buscador {
+  position: relative;
+  flex: 1 1 220px;
+  min-width: 200px;
+}
+.buscador i.ti-search {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--texto-muted);
+  font-size: 14px;
+  pointer-events: none;
+}
+.buscador input {
+  width: 100%;
+  padding: 8px 30px 8px 32px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  font-size: 13px;
+  background: #fff;
+  color: var(--texto);
+  transition: border-color .15s;
+}
+.buscador input:focus { outline: none; border-color: var(--verde); }
+.buscador input::placeholder { color: #9ca3af; }
+.buscador-limpiar {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--texto-muted);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  border-radius: 4px;
+}
+.buscador-limpiar:hover { color: #dc2626; background: #fef2f2; }
+
+.filtro-select {
+  padding: 8px 10px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  font-size: 12px;
+  background: #fff;
+  color: var(--texto);
+  min-width: 150px;
+  cursor: pointer;
+  transition: border-color .15s;
+}
+.filtro-select:focus { outline: none; border-color: var(--verde); }
+
+.btn-limpiar-filtros {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 12px;
+  background: transparent;
+  border: 1px solid var(--plateado);
+  border-radius: 6px;
+  color: var(--texto-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all .15s;
+}
+.btn-limpiar-filtros:hover { border-color: #dc2626; color: #dc2626; background: #fef2f2; }
+
+.contador-resultados {
+  font-size: 11px;
+  color: var(--texto-muted);
+  white-space: nowrap;
+  margin-left: auto;
+  padding-left: 4px;
+}
+
+.sin-resultados {
+  padding: 2.5rem 1rem;
+  text-align: center;
+  color: var(--texto-muted);
+}
+.sin-resultados i {
+  font-size: 32px;
+  display: block;
+  margin-bottom: 8px;
+  opacity: .45;
+}
+.sin-resultados p { font-size: 13px; }
+
+/* Tarjetas de estadística clicables (usadas como accesos rápidos de filtro) */
+.stat-card-clicable {
+  cursor: pointer;
+  transition: transform .12s, box-shadow .12s, border-color .12s;
+}
+.stat-card-clicable:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+.stat-card-clicable.activa {
+  border-color: var(--naranja);
+  box-shadow: 0 0 0 1px var(--naranja) inset;
+}

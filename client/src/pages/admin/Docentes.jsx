@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
+import { useFiltro } from '../../hooks/useFiltro'
+import BarraFiltros, { SinResultadosFiltro } from '../../components/BarraFiltros'
 
 export default function Docentes() {
   const [docentes, setDocentes] = useState([])
@@ -50,6 +52,32 @@ export default function Docentes() {
 
   const activos = docentes.filter(d => d.estatus).length
 
+  // ── Búsqueda y filtros de la tabla ──────────────────────────────────────
+  const programasUnicos = Array.from(new Set(
+    docentes.map(d => d.programa_educativo).filter(Boolean)
+  )).sort((a, b) => a.localeCompare(b, 'es'))
+
+  const {
+    query, setQuery, valoresFiltro, setFiltro, limpiar: limpiarFiltros,
+    resultado: docentesFiltrados, hayFiltrosActivos, total, totalFiltrado
+  } = useFiltro(docentes, {
+    buscarEn: d => `${d.nombre} ${d.apellido_p} ${d.apellido_m} ${d.correo} ${d.programa_educativo || ''}`,
+    filtros: {
+      estatus: (d, v) => (v === 'activo' ? !!d.estatus : !d.estatus),
+      programa: (d, v) => d.programa_educativo === v,
+    }
+  })
+
+  const definicionFiltros = [
+    {
+      clave: 'estatus', label: 'Estatus', opciones: [
+        { value: 'activo', label: 'Activo' },
+        { value: 'baja', label: 'Baja' },
+      ]
+    },
+    { clave: 'programa', label: 'Programa', opciones: programasUnicos.map(p => ({ value: p, label: p })) },
+  ]
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
@@ -66,14 +94,18 @@ export default function Docentes() {
         </button>
       </div>
 
-      {/* Estadísticas */}
+      {/* Estadísticas — también funcionan como accesos rápidos de filtro */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '1.25rem' }}>
         {[
-          { label: 'Total docentes', valor: docentes.length, color: 'var(--verde)' },
-          { label: 'Activos', valor: activos, color: 'var(--naranja)' },
-          { label: 'Dados de baja', valor: docentes.length - activos, color: 'var(--dorado)' },
+          { label: 'Total docentes', valor: docentes.length, color: 'var(--verde)', onClick: limpiarFiltros, activa: !hayFiltrosActivos },
+          { label: 'Activos', valor: activos, color: 'var(--naranja)', onClick: () => setFiltro('estatus', 'activo'), activa: valoresFiltro.estatus === 'activo' },
+          { label: 'Dados de baja', valor: docentes.length - activos, color: 'var(--dorado)', onClick: () => setFiltro('estatus', 'baja'), activa: valoresFiltro.estatus === 'baja' },
         ].map(s => (
-          <div key={s.label} className="card" style={{ padding: '1rem', borderTop: `3px solid ${s.color}`, marginBottom: 0 }}>
+          <div key={s.label}
+            className={`card stat-card-clicable ${s.activa ? 'activa' : ''}`}
+            style={{ padding: '1rem', borderTop: `3px solid ${s.color}`, marginBottom: 0 }}
+            onClick={s.onClick}
+            title="Clic para filtrar la tabla">
             <div style={{ fontSize: '1.6rem', fontWeight: '700', color: s.color }}>{s.valor}</div>
             <div style={{ fontSize: '11px', color: 'var(--texto-muted)', marginTop: '2px' }}>{s.label}</div>
           </div>
@@ -132,6 +164,18 @@ export default function Docentes() {
         </div>
       )}
 
+      {/* Búsqueda y filtros */}
+      {docentes.length > 0 && (
+        <BarraFiltros
+          query={query} onQuery={setQuery}
+          placeholder="Buscar por nombre, correo o programa..."
+          filtros={definicionFiltros}
+          valoresFiltro={valoresFiltro} onFiltro={setFiltro}
+          onLimpiar={limpiarFiltros} hayFiltrosActivos={hayFiltrosActivos}
+          total={total} totalFiltrado={totalFiltrado}
+        />
+      )}
+
       {/* Tabla */}
       <div className="card" style={{ padding: '0', overflow: 'hidden' }}>
         {cargando ? (
@@ -140,6 +184,8 @@ export default function Docentes() {
           <p style={{ padding: '2rem', textAlign: 'center', color: 'var(--texto-muted)' }}>
             No hay docentes registrados aún.
           </p>
+        ) : docentesFiltrados.length === 0 ? (
+          <SinResultadosFiltro onLimpiar={limpiarFiltros} />
         ) : (
           <div className="tabla-wrapper">
             <table className="tabla">
@@ -151,7 +197,7 @@ export default function Docentes() {
                 </tr>
               </thead>
               <tbody>
-                {docentes.map(d => (
+                {docentesFiltrados.map(d => (
                   <tr key={d.id}>
                     <td style={{ fontWeight: '500' }}>{d.nombre} {d.apellido_p} {d.apellido_m}</td>
                     <td>{d.programa_educativo || '—'}</td>

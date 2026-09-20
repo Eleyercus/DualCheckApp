@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
+import { useFiltro } from '../../hooks/useFiltro'
+import BarraFiltros, { SinResultadosFiltro } from '../../components/BarraFiltros'
 
 const BADGE = {
   activa: { label: 'Activa', bg: '#dcfce7', color: '#166534' },
@@ -73,6 +75,38 @@ export default function Asignaciones() {
   const activas = asignaciones.filter(a => a.activa).length
   const docenteSeleccionado = docentes.find(d => String(d.id) === String(form.id_docente))
 
+  // ── Búsqueda y filtros de la tabla ──────────────────────────────────────
+  const docentesEnTabla = Array.from(new Set(
+    asignaciones.map(a => `${a.doc_nombre} ${a.doc_apellido_p}`).filter(Boolean)
+  )).sort((a, b) => a.localeCompare(b, 'es'))
+  const periodosEnTabla = Array.from(new Set(
+    asignaciones.map(a => a.periodo_nombre).filter(Boolean)
+  )).sort((a, b) => a.localeCompare(b, 'es'))
+
+  const {
+    query, setQuery, valoresFiltro, setFiltro, limpiar: limpiarFiltros,
+    resultado: asignacionesFiltradas, hayFiltrosActivos, total, totalFiltrado
+  } = useFiltro(asignaciones, {
+    buscarEn: a => `${a.est_nombre} ${a.est_apellido_p} ${a.est_apellido_m} ${a.matricula} ${a.grupo || ''} ${a.doc_nombre} ${a.doc_apellido_p}`,
+    filtros: {
+      estatus: (a, v) => a.estatus === v,
+      docente: (a, v) => `${a.doc_nombre} ${a.doc_apellido_p}` === v,
+      periodo: (a, v) => a.periodo_nombre === v,
+    }
+  })
+
+  const definicionFiltros = [
+    {
+      clave: 'estatus', label: 'Estatus', opciones: [
+        { value: 'activa', label: 'Activa' },
+        { value: 'concluida', label: 'Concluida' },
+        { value: 'cancelada', label: 'Cancelada' },
+      ]
+    },
+    { clave: 'docente', label: 'Docente', opciones: docentesEnTabla.map(d => ({ value: d, label: d })) },
+    { clave: 'periodo', label: 'Periodo', opciones: periodosEnTabla.map(p => ({ value: p, label: p })) },
+  ]
+
   if (cargando) return (
     <p style={{ padding: '2rem', textAlign: 'center', color: 'var(--texto-muted)' }}>Cargando...</p>
   )
@@ -99,11 +133,15 @@ export default function Asignaciones() {
       {/* Estadísticas */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '1.25rem' }}>
         {[
-          { label: 'Asignaciones activas', valor: activas, color: 'var(--verde)' },
+          { label: 'Asignaciones activas', valor: activas, color: 'var(--verde)', onClick: () => setFiltro('estatus', 'activa'), activa: valoresFiltro.estatus === 'activa' },
           { label: 'Pendientes de asignar', valor: sinAsesor.length, color: sinAsesor.length > 0 ? '#dc2626' : 'var(--texto-muted)' },
           { label: 'Docentes participando', valor: docentes.filter(d => d.estudiantes_asignados > 0).length, color: 'var(--dorado)' },
         ].map(s => (
-          <div key={s.label} className="card" style={{ padding: '1rem', borderTop: `3px solid ${s.color}`, marginBottom: 0 }}>
+          <div key={s.label}
+            className={`card ${s.onClick ? 'stat-card-clicable' : ''} ${s.activa ? 'activa' : ''}`}
+            style={{ padding: '1rem', borderTop: `3px solid ${s.color}`, marginBottom: 0 }}
+            onClick={s.onClick}
+            title={s.onClick ? 'Clic para filtrar la tabla' : undefined}>
             <div style={{ fontSize: '1.6rem', fontWeight: '700', color: s.color }}>{s.valor}</div>
             <div style={{ fontSize: '11px', color: 'var(--texto-muted)', marginTop: '2px' }}>{s.label}</div>
           </div>
@@ -247,12 +285,26 @@ export default function Asignaciones() {
         </div>
       )}
 
+      {/* Búsqueda y filtros */}
+      {asignaciones.length > 0 && (
+        <BarraFiltros
+          query={query} onQuery={setQuery}
+          placeholder="Buscar por estudiante, matrícula o docente..."
+          filtros={definicionFiltros}
+          valoresFiltro={valoresFiltro} onFiltro={setFiltro}
+          onLimpiar={limpiarFiltros} hayFiltrosActivos={hayFiltrosActivos}
+          total={total} totalFiltrado={totalFiltrado}
+        />
+      )}
+
       {/* Tabla de asignaciones */}
       <div className="card" style={{ padding: '0', overflow: 'hidden' }}>
         {asignaciones.length === 0 ? (
           <p style={{ padding: '2rem', textAlign: 'center', color: 'var(--texto-muted)' }}>
             No hay asignaciones registradas aún.
           </p>
+        ) : asignacionesFiltradas.length === 0 ? (
+          <SinResultadosFiltro onLimpiar={limpiarFiltros} />
         ) : (
           <div className="tabla-wrapper">
             <table className="tabla">
@@ -264,7 +316,7 @@ export default function Asignaciones() {
                 </tr>
               </thead>
               <tbody>
-                {asignaciones.map(a => (
+                {asignacionesFiltradas.map(a => (
                   <tr key={a.id}>
                     <td style={{ fontWeight: '500' }}>
                       {a.est_nombre} {a.est_apellido_p} {a.est_apellido_m}
