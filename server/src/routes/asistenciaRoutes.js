@@ -1,6 +1,7 @@
 const express = require('express')
 const router = express.Router()
 const { verificarToken, soloDocente, soloEstudiante, soloAdmin } = require('../middleware/auth')
+const { restringirIPEstudiante } = require('../middleware/restringirIPEstudiante')
 const {
   getMisEstudiantes,
   getAsistencia,
@@ -27,7 +28,7 @@ router.patch('/solicitudes/:id_bitacora/aprobar', verificarToken, soloAdmin, apr
 router.patch('/solicitudes/:id_bitacora/rechazar', verificarToken, soloAdmin, rechazarCorreccion)
 
 // Rutas del estudiante
-router.get('/mi-asistencia', verificarToken, soloEstudiante, getAsistenciaEstudiante)
-router.post('/asignacion/:id_asignacion/semana/:semana/estudiante', verificarToken, soloEstudiante, confirmarAsistenciaEstudiante)
+router.get('/mi-asistencia', verificarToken, soloEstudiante, restringirIPEstudiante, getAsistenciaEstudiante)
+router.post('/asignacion/:id_asignacion/semana/:semana/estudiante', verificarToken, soloEstudiante, restringirIPEstudiante, confirmarAsistenciaEstudiante)
 
 module.exports = router

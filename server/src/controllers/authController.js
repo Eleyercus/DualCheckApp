@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const db = require('../config/db')
+const { verificarIPLoginEstudiante } = require('../middleware/restringirIPEstudiante')
 
 // LOGIN
 const login = async (req, res) => {
@@ -23,6 +24,17 @@ const login = async (req, res) => {
     }
 
     const usuario = rows[0]
+
+    // Restricción por IP para el perfil estudiante (RF-04). Desactivada
+    // hasta que se configure IP_EQUIPO_ESTUDIANTE en el .env del servidor.
+    if (usuario.perfil === 'estudiante') {
+      const { permitido } = verificarIPLoginEstudiante(req)
+      if (!permitido) {
+        return res.status(403).json({
+          error: 'El acceso de estudiantes solo está permitido desde el equipo autorizado en la universidad.'
+        })
+      }
+    }
 
     // Verificar si la cuenta está bloqueada
     if (usuario.bloqueado_hasta && new Date() < new Date(usuario.bloqueado_hasta)) {
