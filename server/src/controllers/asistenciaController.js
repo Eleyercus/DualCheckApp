@@ -309,6 +309,52 @@ const aprobarCorreccion = async (req, res) => {
   }
 }
 
+// Rechazar solicitud de corrección (solo administrador)
+const rechazarCorreccion = async (req, res) => {
+  const { id_bitacora } = req.params
+  const { motivo_rechazo } = req.body
+
+  try {
+    const [registro] = await db.query(
+      'SELECT * FROM bitacora WHERE id = ? AND accion = ?',
+      [id_bitacora, 'SOLICITUD_CORRECCION']
+    )
+
+    if (registro.length === 0) {
+      return res.status(404).json({ error: 'Solicitud no encontrada' })
+    }
+
+    const datos = JSON.parse(registro[0].detalle)
+
+    if (datos.estatus !== 'PENDIENTE') {
+      return res.status(400).json({ error: 'Esta solicitud ya fue procesada' })
+    }
+
+    datos.estatus = 'RECHAZADA'
+    datos.rechazada_por = req.usuario.correo
+    datos.fecha_rechazo = new Date().toISOString()
+    if (motivo_rechazo && motivo_rechazo.trim()) {
+      datos.motivo_rechazo = motivo_rechazo.trim()
+    }
+
+    await db.query(
+      'UPDATE bitacora SET detalle = ? WHERE id = ?',
+      [JSON.stringify(datos), id_bitacora]
+    )
+
+    await db.query(
+      'INSERT INTO bitacora (id_usuario, accion, entidad_afectada, detalle) VALUES (?, ?, ?, ?)',
+      [req.usuario.id, 'RECHAZO_CORRECCION', 'asistencia',
+        `Corrección rechazada: semana ${datos.semana} para asignación ${datos.id_asignacion}. Motivo original: ${datos.motivo}`]
+    )
+
+    res.json({ mensaje: 'Solicitud de corrección rechazada' })
+  } catch (error) {
+    console.error('Error rechazando corrección:', error)
+    res.status(500).json({ error: 'Error interno del servidor' })
+  }
+}
+
 // Obtener solicitudes de corrección pendientes (solo administrador)
 const getSolicitudesPendientes = async (req, res) => {
   try {
@@ -435,6 +481,7 @@ module.exports = {
   registrarAsistenciaDocente,
   solicitarCorreccion,
   aprobarCorreccion,
+  rechazarCorreccion,
   getSolicitudesPendientes,
   getAsistenciaEstudiante,
   confirmarAsistenciaEstudiante

@@ -8,6 +8,7 @@ const {
   registrarAsistenciaDocente,
   solicitarCorreccion,
   aprobarCorreccion,
+  rechazarCorreccion,
   getSolicitudesPendientes,
   getAsistenciaEstudiante,
   confirmarAsistenciaEstudiante
@@ -23,6 +24,7 @@ router.post('/asignacion/:id_asignacion/semana/:semana/solicitar-correccion', ve
 // Rutas del administrador
 router.get('/solicitudes-pendientes', verificarToken, soloAdmin, getSolicitudesPendientes)
 router.patch('/solicitudes/:id_bitacora/aprobar', verificarToken, soloAdmin, aprobarCorreccion)
+router.patch('/solicitudes/:id_bitacora/rechazar', verificarToken, soloAdmin, rechazarCorreccion)
 
 // Rutas del estudiante
 router.get('/mi-asistencia', verificarToken, soloEstudiante, getAsistenciaEstudiante)

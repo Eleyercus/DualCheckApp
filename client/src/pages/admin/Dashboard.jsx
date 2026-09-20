@@ -6,6 +6,7 @@ import Docentes from './Docentes'
 import Asignaciones from './Asignaciones'
 import Periodos from './Periodos'
 import Reportes from './Reportes'
+import Correcciones from './Correcciones'
 
 export default function AdminDashboard() {
   const { usuario, logout } = useAuth()
@@ -19,7 +20,7 @@ export default function AdminDashboard() {
     { key: 'estudiantes', label: 'Estudiantes', icon: 'ti-users' },
     { key: 'docentes', label: 'Docentes', icon: 'ti-school' },
     { key: 'asignaciones', label: 'Asignaciones', icon: 'ti-link' },
-    { key: 'asistencia', label: 'Asistencia', icon: 'ti-calendar-check' },
+    { key: 'asistencia', label: 'Correcciones', icon: 'ti-calendar-check' },
     { key: 'reportes', label: 'Reportes', icon: 'ti-chart-bar' },
   ]
 
@@ -109,12 +110,7 @@ export default function AdminDashboard() {
           {seccion === 'estudiantes' && <Estudiantes />}
           {seccion === 'docentes' && <Docentes />}
           {seccion === 'asignaciones' && <Asignaciones />}
-          {seccion === 'asistencia' && (
-            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--texto-muted)' }}>
-              <i className="ti ti-calendar-check" style={{ fontSize: '48px', display: 'block', marginBottom: '1rem' }} />
-              <p style={{ fontSize: '14px' }}>Módulo de asistencia — disponible próximamente</p>
-            </div>
-          )}
+          {seccion === 'asistencia' && <Correcciones />}
           {seccion === 'reportes' && <Reportes />}
         </main>
       </div>
