@@ -1,94 +1,92 @@
-# Manual de Despliegue — DualCheck UT
+# Manual de Despliegue — DualCheck UT (Servidor Windows — 172.16.3.212)
 
-Guía completa para poner la aplicación a correr en el servidor de la
-Universidad Tecnológica de Cadereyta, desde el repositorio de GitHub hasta
-que quede accesible por red local para administradores, docentes y el
-equipo fijo de estudiantes.
+Versión específica para tu caso real: servidor Windows en `172.16.3.212`,
+sin Node ni MySQL instalados todavía, y sin equipo fijo de estudiantes por
+ahora (esa restricción se deja preparada pero apagada).
 
-Escrito asumiendo un servidor **Linux (Ubuntu/Debian)**, que es lo más común
-en este tipo de despliegues institucionales. Si el servidor real resulta ser
-Windows Server, los pasos de instalación de paquetes cambian — hay una nota
-al final señalando qué reemplazar.
+Todo se corre desde **PowerShell** en esa máquina — conéctate por Escritorio
+Remoto (RDP) o directamente si tienes acceso físico, y abre PowerShell
+**como Administrador** para los pasos de instalación.
 
 ---
 
-## 0. Antes de empezar — información que necesitas de TI
+## 0. Conéctate al servidor
 
-No avances sin confirmar esto con el área de TI:
+Desde tu computadora:
+```powershell
+mstsc /v:172.16.3.212
+```
+(o usa el cliente de Escritorio Remoto de Windows con esa IP). Necesitas
+usuario y contraseña de esa máquina — si no los tienes, es lo primero que
+hay que pedirle a TI.
 
-- [ ] Dirección IP del servidor dentro de la red LAN
-- [ ] Sistema operativo del servidor
-- [ ] Forma de acceso remoto (SSH, usuario, contraseña o llave)
-- [ ] ¿Node.js y MySQL/MariaDB ya están instalados, o hay que instalarlos?
-- [ ] ¿Qué puertos están libres/permitidos? (se necesitan al menos 2, ver
-      sección 6)
-- [ ] Dirección IP en la LAN de la computadora fija que usarán los
-      estudiantes (si aún no la tienen, se puede desplegar igual y activar
-      esa restricción después — ver sección 8)
+Una vez dentro, abre **PowerShell como Administrador** (clic derecho →
+"Ejecutar como administrador") para los pasos 1 y 2.
 
 ---
 
-## 1. Conectarte al servidor
+## 1. Instalar Node.js, Git y MySQL
 
-```bash
-ssh usuario@IP_DEL_SERVIDOR
+Si el servidor tiene `winget` (viene por defecto en Windows 10/11 y Server
+2022 actualizado):
+
+```powershell
+winget install OpenJS.NodeJS.LTS
+winget install Git.Git
+winget install Oracle.MySQL
 ```
 
----
+Cierra y vuelve a abrir PowerShell después de instalar (para que reconozca
+los comandos nuevos), y verifica:
 
-## 2. Instalar lo necesario en el servidor (una sola vez)
-
-Verifica primero qué ya está instalado:
-
-```bash
-node -v      # necesitas v18 o superior
-mysql --version   # o: mariadb --version
+```powershell
+node -v
 git --version
+mysql --version
 ```
 
-Si falta algo:
+**Si `winget` no está disponible**, descarga e instala manualmente en el
+navegador del servidor:
+- Node.js LTS: https://nodejs.org (elige el instalador .msi de Windows)
+- Git: https://git-scm.com/download/win
+- MySQL: https://dev.mysql.com/downloads/installer/ (elige "MySQL Installer
+  for Windows", instala el "Server" y deja correr el asistente — te pedirá
+  definir la contraseña de `root`, anótala)
 
-```bash
-# Actualizar paquetes
-sudo apt update
+---
 
-# Node.js 20 LTS
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt install -y nodejs
+## 2. Instalar pnpm y pm2
 
-# MySQL (si no hay ya un motor de base de datos)
-sudo apt install -y mysql-server
-sudo mysql_secure_installation
-
-# Git
-sudo apt install -y git
-
-# pnpm (el gestor de paquetes que usa el proyecto)
-sudo npm install -g pnpm
-
-# pm2 (para que el backend siga corriendo aunque cierres la sesión SSH)
-sudo npm install -g pm2
+```powershell
+npm install -g pnpm
+npm install -g pm2
+npm install -g pm2-windows-startup
+npm install -g serve
+pm2-startup install
 ```
+
+`pm2-windows-startup` es lo que hace que la app se vuelva a levantar sola
+si el servidor se reinicia (en Windows, `pm2 startup` normal no funciona
+igual que en Linux, por eso este paso extra).
 
 ---
 
 ## 3. Clonar el proyecto
 
-```bash
-cd /opt
-sudo git clone https://github.com/Eleyercus/DualCheckApp.git
-sudo chown -R $USER:$USER DualCheckApp
+```powershell
+cd C:\
+mkdir DualCheckApp
 cd DualCheckApp
+git clone https://github.com/Eleyercus/DualCheckApp.git .
 ```
-
-*(Si `/opt` no es una carpeta a la que tengas permiso, usa tu carpeta de
-usuario, por ejemplo `/home/tu_usuario/DualCheckApp`.)*
 
 ---
 
 ## 4. Crear la base de datos desde cero
 
-```bash
+Abre MySQL (te pedirá la contraseña de `root` que definiste al instalar):
+
+```powershell
 mysql -u root -p
 ```
 
@@ -102,24 +100,26 @@ FLUSH PRIVILEGES;
 EXIT;
 ```
 
-Ahora crea la estructura de tablas (sin ningún dato):
+Crea la estructura de tablas (sin ningún dato). Recuerda: en PowerShell el
+operador `<` no funciona, usa `Get-Content` con pipe:
 
-```bash
-mysql -u root -p dualcheck_db < server/schema.sql
+```powershell
+Get-Content server\schema.sql | mysql -u root -p dualcheck_db
 ```
 
-Crea tu primera cuenta de administrador. Primero genera el hash de tu
-contraseña:
+---
 
-```bash
+## 5. Crear tu cuenta de administrador
+
+```powershell
 cd server
-pnpm install     # necesario antes para que exista bcryptjs
+pnpm install
 node -e "console.log(require('bcryptjs').hashSync('TU_PASSWORD_REAL', 10))"
 ```
 
-Copia el resultado (empieza con `$2a$10$...`) y úsalo aquí:
+Copia el hash que imprime (empieza con `$2a$10$...`) y úsalo aquí:
 
-```bash
+```powershell
 mysql -u root -p dualcheck_db
 ```
 ```sql
@@ -129,184 +129,135 @@ EXIT;
 ```
 
 *(`requiere_cambio_password = 1` te obliga a cambiarla en tu primer login —
-usa ese primer login para poner tu contraseña real y definitiva.)*
+ponle ahí tu contraseña real y definitiva.)*
 
 ---
 
-## 5. Configurar y levantar el backend
+## 6. Configurar y levantar el backend
 
-Dentro de `server/`, crea el archivo `.env`:
+Dentro de `server\`, genera un `JWT_SECRET` real:
 
-```bash
-cat > .env << 'EOF'
+```powershell
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+Crea el archivo `.env` (edítalo con notepad o el comando de abajo, pegando
+el JWT_SECRET que acabas de generar):
+
+```powershell
+@"
 DB_HOST=localhost
 DB_USER=dualcheck
 DB_PASSWORD=ELIGE_UNA_CONTRASEÑA_FUERTE_AQUI
 DB_NAME=dualcheck_db
-JWT_SECRET=
+JWT_SECRET=PEGA_AQUI_EL_JWT_SECRET_GENERADO
 PORT=3001
 IP_EQUIPO_ESTUDIANTE=
-EOF
+"@ | Out-File -Encoding utf8 .env
 ```
 
-Genera un `JWT_SECRET` real (nunca dejes el de desarrollo) y pégalo en el
-archivo:
+*(`IP_EQUIPO_ESTUDIANTE` se queda vacío por ahora — todavía no tienen el
+equipo/tablet de estudiantes. La restricción queda lista pero apagada, sin
+afectar a nadie. Ver sección 9.)*
 
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
+Levanta el backend con pm2:
 
-Dependencias ya instaladas del paso 4. Arranca el backend con pm2 (así
-sigue vivo aunque cierres la terminal):
-
-```bash
+```powershell
 pm2 start src/index.js --name dualcheck-backend
 pm2 save
-pm2 startup    # sigue las instrucciones que imprime, para que arranque solo si el servidor se reinicia
 ```
 
 Verifica que responde:
 
-```bash
+```powershell
 curl http://localhost:3001/api/auth/login
 ```
-*(Un error de "correo y contraseña son requeridos" es la respuesta correcta
-— significa que el servidor está vivo.)*
+*(Un error de "correo y contraseña son requeridos" es la respuesta
+correcta — significa que el servidor está vivo.)*
 
 ---
 
-## 6. Compilar y servir el cliente (frontend)
+## 7. Compilar y servir el cliente (frontend)
 
-Desde la carpeta `client/`:
-
-```bash
-cd ../client
-echo "VITE_API_URL=http://IP_DEL_SERVIDOR:3001/api" > .env.production
+```powershell
+cd ..\client
+"VITE_API_URL=http://172.16.3.212:3001/api" | Out-File -Encoding utf8 .env.production
 pnpm install
 pnpm build
-```
-
-Esto genera la carpeta `dist/` con la aplicación ya compilada. Dos formas
-de servirla, elige una:
-
-### Opción A — con `serve` + pm2 (más simple, no requiere nada más)
-
-```bash
-sudo npm install -g serve
 pm2 start "serve -s dist -l 5173" --name dualcheck-frontend
 pm2 save
 ```
 
-La app queda disponible en `http://IP_DEL_SERVIDOR:5173`.
-
-### Opción B — con nginx (más robusto, mejor si TI ya lo tiene disponible)
-
-```bash
-sudo apt install -y nginx
-sudo cp -r dist/* /var/www/html/
-```
-
-Edita `/etc/nginx/sites-available/default` para que las rutas de React
-funcionen correctamente (evita error 404 al recargar una página interna):
-
-```nginx
-location / {
-    try_files $uri $uri/ /index.html;
-}
-```
-
-```bash
-sudo systemctl restart nginx
-```
-
-La app queda disponible en `http://IP_DEL_SERVIDOR` (puerto 80, sin
-necesidad de escribir puerto en el navegador).
+La app queda disponible en `http://172.16.3.212:5173` para cualquiera en
+la misma red.
 
 ---
 
-## 7. Abrir los puertos necesarios
+## 8. Abrir los puertos en el Firewall de Windows
 
-Si el servidor tiene firewall activo (`ufw` es lo más común en Ubuntu):
+En PowerShell como Administrador:
 
-```bash
-sudo ufw allow 3001/tcp        # backend
-sudo ufw allow 5173/tcp        # frontend, solo si usaste la Opción A
-sudo ufw allow 80/tcp          # frontend, solo si usaste la Opción B (nginx)
+```powershell
+New-NetFirewallRule -DisplayName "DualCheck Backend" -Direction Inbound -Protocol TCP -LocalPort 3001 -Action Allow
+New-NetFirewallRule -DisplayName "DualCheck Frontend" -Direction Inbound -Protocol TCP -LocalPort 5173 -Action Allow
 ```
 
-Confirma con TI si hay un firewall adicional a nivel de red que también
-necesite estas reglas.
+Si hay un firewall adicional de red (no solo el de Windows), confirma con
+TI que estos dos puertos estén permitidos también ahí.
 
 ---
 
-## 8. Probar desde las computadoras reales
+## 9. Probar desde las computadoras reales
 
 Desde **cualquier computadora de administrador o docente conectada a la
 misma red**, abre el navegador en:
 
 ```
-http://IP_DEL_SERVIDOR:5173      (Opción A)
-http://IP_DEL_SERVIDOR           (Opción B con nginx)
+http://172.16.3.212:5173
 ```
 
-Inicia sesión con el admin que creaste en el paso 4. Deberías poder
-navegar todos los paneles.
+Inicia sesión con el admin que creaste en el paso 5.
 
-**Restricción por IP para estudiantes** (cuando tengas la IP de su equipo
-fijo):
+**Sobre el equipo de estudiantes**: como todavía no tienen ni tablet ni
+computadora fija asignada, la aplicación queda utilizable igual — cualquier
+equipo en la red puede entrar como estudiante por ahora. En cuanto
+consigan el dispositivo (tablet u otra PC), solo hace falta:
 
-```bash
-cd /opt/DualCheckApp/server
-nano .env        # o vim, o el editor que prefieras
-```
+1. Conectar ese equipo a la red y ver qué IP le toca (`ipconfig` en esa
+   máquina).
+2. En el servidor, editar `C:\DualCheckApp\server\.env` y poner esa IP en
+   `IP_EQUIPO_ESTUDIANTE`.
+3. Reiniciar el backend:
+   ```powershell
+   pm2 restart dualcheck-backend
+   ```
 
-Cambia la línea:
-```
-IP_EQUIPO_ESTUDIANTE=IP_REAL_DE_LA_COMPUTADORA_DE_ESTUDIANTES
-```
-
-Guarda y reinicia el backend para que tome el cambio:
-
-```bash
-pm2 restart dualcheck-backend
-```
-
-Desde ese momento, solo esa IP podrá iniciar sesión con el perfil
-Estudiante — pruébalo desde esa computadora y confirma que desde cualquier
-otra se rechaza.
+Desde ese momento, solo ese equipo podrá iniciar sesión como Estudiante —
+avísame cuando lo tengan y lo probamos juntos.
 
 ---
 
-## 9. Después de que todo funcione
+## 10. Después de que todo funcione
 
-- [ ] Da de alta a los docentes y estudiantes reales (no antes de tener la
-      fecha real del periodo — sección 4 de tu Especificación de
-      Requerimientos)
-- [ ] Crea el periodo real desde el panel de administrador, con la fecha de
-      inicio que confirme coordinación de estadías
-- [ ] Configura un respaldo automático diario de la base de datos, por
-      ejemplo con una tarea programada (`crontab -e`):
+- [ ] Crea el periodo real desde el panel de administrador, con la fecha
+      que confirme coordinación de estadías (siguen sin responder —
+      mientras tanto, no des de alta estudiantes ni actives asignaciones
+      reales)
+- [ ] Respaldo automático diario — en Windows, usa el Programador de
+      tareas (`taskschd.msc`) para correr diario:
+      ```powershell
+      mysqldump -u dualcheck -p"TU_PASSWORD" dualcheck_db > C:\Respaldos\dualcheck_$(Get-Date -Format yyyy-MM-dd).sql
       ```
-      0 2 * * * mysqldump -u dualcheck -p'TU_PASSWORD' dualcheck_db > /respaldos/dualcheck_$(date +\%F).sql
-      ```
-- [ ] Pendiente a futuro: HTTPS con certificado (requiere que TI lo
-      gestione) — mientras tanto, la app queda accesible solo dentro de la
-      red local, lo cual reduce el riesgo.
+- [ ] Pendiente a futuro: HTTPS con certificado, y el equipo fijo de
+      estudiantes con su IP.
 
 ---
 
-## Si el servidor resulta ser Windows en vez de Linux
+## Comandos útiles si algo falla
 
-Los pasos de base de datos, `.env`, `schema.sql`, `pnpm build` y `pm2` son
-**idénticos** (pm2 también corre en Windows). Lo que cambia:
-
-- Instalación de Node.js y MySQL: descarga los instaladores oficiales
-  (`nodejs.org`, `dev.mysql.com`) en vez de `apt install`.
-- No hay `ufw`; los puertos se abren desde **Firewall de Windows Defender**
-  o con `netsh advfirewall firewall add rule name="DualCheck" dir=in
-  action=allow protocol=TCP localport=3001`.
-- En vez de nginx, usar IIS o quedarte con la Opción A (`serve` + pm2), que
-  funciona igual en Windows.
-
-Avísame en cuanto sepas el sistema operativo real y ajusto esta sección con
-los comandos exactos.
+```powershell
+pm2 list                        # ver si backend/frontend siguen corriendo
+pm2 logs dualcheck-backend      # ver errores del backend en vivo
+pm2 restart dualcheck-backend   # reiniciar tras cambiar el .env
+pm2 restart dualcheck-frontend  # reiniciar el frontend
+```
