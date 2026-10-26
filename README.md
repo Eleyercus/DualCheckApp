@@ -27,6 +27,8 @@ Sistema web para gestionar el seguimiento de estudiantes en estadia, sus asignac
 
 ## Instalacion
 
+> Guía paso a paso para Windows/PowerShell, con datos de prueba y guion de demostración: [`docs/INSTALACION_LOCAL.md`](docs/INSTALACION_LOCAL.md).
+
 1. Clona el repositorio y entra en el proyecto:
 
    ```bash
