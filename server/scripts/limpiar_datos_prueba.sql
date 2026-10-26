@@ -22,6 +22,26 @@ JOIN estudiantes e ON asg.id_estudiante = e.id
 JOIN usuarios u ON e.id_usuario = u.id
 WHERE u.correo LIKE '%@alumno.seed.local';
 
+-- 3b) Asignaciones (y su asistencia) de docentes de prueba con estudiantes
+--     que no son del seed, p. ej. creados a mano durante una demostración;
+--     sin esto no se podría borrar al docente por la llave foránea
+DELETE a FROM asistencia a
+JOIN asignaciones asg ON a.id_asignacion = asg.id
+JOIN docentes d ON asg.id_docente = d.id
+JOIN usuarios u ON d.id_usuario = u.id
+WHERE u.correo LIKE '%@seed.local';
+
+DELETE asg FROM asignaciones asg
+JOIN docentes d ON asg.id_docente = d.id
+JOIN usuarios u ON d.id_usuario = u.id
+WHERE u.correo LIKE '%@seed.local';
+
+-- 3c) Datos de empresa capturados para estudiantes de prueba
+DELETE emp FROM empresas_estadia emp
+JOIN estudiantes e ON emp.id_estudiante = e.id
+JOIN usuarios u ON e.id_usuario = u.id
+WHERE u.correo LIKE '%@alumno.seed.local';
+
 -- 4) Estudiantes y docentes sembrados
 DELETE e FROM estudiantes e
 JOIN usuarios u ON e.id_usuario = u.id

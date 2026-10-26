@@ -6,6 +6,7 @@ Contexto para continuar el desarrollo en Claude Code. Léelo completo antes de t
 - `docs/ESTADO_Y_PENDIENTES.md` — qué está hecho, qué falta, bloqueos externos
 - `docs/DECISIONES.md` — decisiones tomadas y por qué
 - `docs/DESPLIEGUE_Y_WINDOWS.md` — despliegue en Windows, pm2, trampas de PowerShell
+- `docs/INSTALACION_LOCAL.md` — guía para que el equipo instale la app en su PC/laptop con datos de prueba (incluye `scripts/crear_admin.js`)
 
 ## Qué es
 
