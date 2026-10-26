@@ -26,8 +26,8 @@ export default function Periodos() {
   const handleSubmit = async (e) => {
     e.preventDefault(); limpiar(); setGuardando(true)
     try {
-      await api.post('/periodos', form)
-      setMensaje('Periodo creado correctamente')
+      const res = await api.post('/periodos', form)
+      setMensaje(res.data.mensaje)
       setForm({ nombre: '', fecha_inicio: '', fecha_fin: '' })
       setMostrarForm(false)
       cargar()

@@ -42,7 +42,8 @@ export default function Reportes() {
       if (tipo === 'estudiante') url = `/reportes/estudiante/${form.id_estudiante}/periodo/${form.id_periodo}/${formato}`
 
       const token = localStorage.getItem('token')
-      const res = await fetch(`http://localhost:3001/api${url}`, {
+      // Misma URL base que el resto de la API (VITE_API_URL en producción)
+      const res = await fetch(`${api.defaults.baseURL}${url}`, {
         headers: { Authorization: `Bearer ${token}` }
       })
 

@@ -27,7 +27,7 @@ const getAsignaciones = async (req, res) => {
 // Estudiantes sin asesor DENTRO del periodo activo
 const getEstudiantesSinAsesor = async (req, res) => {
   try {
-    const [periodoActivo] = await db.query('SELECT id FROM periodos WHERE activo = 1 LIMIT 1')
+    const [periodoActivo] = await db.query('SELECT id FROM periodos WHERE activo = 1 ORDER BY fecha_inicio DESC LIMIT 1')
     if (periodoActivo.length === 0) {
       return res.status(400).json({ error: 'No hay un periodo activo configurado' })
     }
@@ -54,7 +54,7 @@ const getEstudiantesSinAsesor = async (req, res) => {
 // Docentes con su carga DENTRO del periodo activo
 const getDocentesActivos = async (req, res) => {
   try {
-    const [periodoActivo] = await db.query('SELECT id FROM periodos WHERE activo = 1 LIMIT 1')
+    const [periodoActivo] = await db.query('SELECT id FROM periodos WHERE activo = 1 ORDER BY fecha_inicio DESC LIMIT 1')
     if (periodoActivo.length === 0) {
       return res.status(400).json({ error: 'No hay un periodo activo configurado' })
     }
@@ -85,7 +85,7 @@ const crearAsignacion = async (req, res) => {
   }
 
   try {
-    const [periodoActivo] = await db.query('SELECT id, nombre FROM periodos WHERE activo = 1 LIMIT 1')
+    const [periodoActivo] = await db.query('SELECT id, nombre FROM periodos WHERE activo = 1 ORDER BY fecha_inicio DESC LIMIT 1')
     if (periodoActivo.length === 0) {
       return res.status(400).json({ error: 'No hay un periodo activo. Crea o activa un periodo antes de asignar.' })
     }

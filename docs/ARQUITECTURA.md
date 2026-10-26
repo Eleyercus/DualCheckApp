@@ -44,7 +44,9 @@ Salvo indicación, requiere JWT y perfil administrador.
 
 ## Flujos clave
 
-**Login.** Se busca el usuario; si `bloqueado_hasta` está vigente -> 403. Para estudiantes se valida la IP **antes** de comparar la contraseña (si `IP_EQUIPO_ESTUDIANTE` está definida). Fallo de contraseña suma intento; al 5.º bloquea 15 min. Éxito resetea contadores y firma JWT (15 min solo estudiante).
+**Login.** Se busca el usuario; si `bloqueado_hasta` está vigente -> 403. Para estudiantes se valida la IP **antes** de comparar la contraseña (si `IP_EQUIPO_ESTUDIANTE` está definida). Fallo de contraseña suma intento; al 5.º bloquea 15 min. Con contraseña correcta, si `usuarios.estatus = 0` (baja) -> 403. Éxito resetea contadores y firma JWT (15 min solo estudiante). `verificarToken` también consulta `estatus` en cada petición, porque los tokens de docente/admin no expiran.
+
+**Periodos.** Un periodo nuevo se crea activo solo si no hay otro activo; si lo hay, se crea inactivo y se activa con `PATCH /periodos/:id/estatus` (que desactiva los demás).
 
 **Asistencia semanal.** El docente confirma y el estudiante confirma por separado, solo en la semana actual (calculada desde `fecha_inicio`, tope 13). Una semana queda "completa" con ambas confirmaciones.
 
