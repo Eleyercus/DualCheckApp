@@ -45,17 +45,28 @@ const crearPeriodo = async (req, res) => {
   }
 
   try {
+    // Solo puede haber un periodo activo. El nuevo se activa únicamente si no
+    // hay ninguno; si ya existe uno, se crea inactivo y el admin lo activa
+    // explícitamente (cambiarEstatusPeriodo desactiva los demás)
+    const [activos] = await db.query('SELECT id FROM periodos WHERE activo = 1 LIMIT 1')
+    const activar = activos.length === 0
+
     await db.query(
-      'INSERT INTO periodos (nombre, fecha_inicio, fecha_fin, creado_por) VALUES (?, ?, ?, ?)',
-      [nombre, fecha_inicio, fecha_fin, req.usuario.id]
+      'INSERT INTO periodos (nombre, fecha_inicio, fecha_fin, activo, creado_por) VALUES (?, ?, ?, ?, ?)',
+      [nombre, fecha_inicio, fecha_fin, activar ? 1 : 0, req.usuario.id]
     )
 
     await db.query(
       'INSERT INTO bitacora (id_usuario, accion, entidad_afectada, detalle) VALUES (?, ?, ?, ?)',
-      [req.usuario.id, 'CREAR_PERIODO', 'periodos', `Periodo "${nombre}" creado (${fecha_inicio} a ${fecha_fin})`]
+      [req.usuario.id, 'CREAR_PERIODO', 'periodos',
+        `Periodo "${nombre}" creado (${fecha_inicio} a ${fecha_fin}) como ${activar ? 'activo' : 'inactivo'}`]
     )
 
-    res.status(201).json({ mensaje: 'Periodo creado correctamente' })
+    res.status(201).json({
+      mensaje: activar
+        ? 'Periodo creado y activado correctamente'
+        : 'Periodo creado como inactivo. Actívalo cuando deba usarse para nuevas asignaciones.'
+    })
   } catch (error) {
     console.error('Error creando periodo:', error)
     res.status(500).json({ error: 'Error interno del servidor' })

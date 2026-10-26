@@ -62,6 +62,12 @@ const login = async (req, res) => {
       return res.status(401).json({ error: 'Credenciales incorrectas' })
     }
 
+    // Cuenta dada de baja (estatus = 0): se revisa después de la contraseña
+    // para no revelar el estado de la cuenta a quien no la conoce
+    if (usuario.estatus === 0) {
+      return res.status(403).json({ error: 'Tu cuenta está desactivada. Contacta a coordinación de estadías.' })
+    }
+
     // Login exitoso — resetear intentos fallidos
     await db.query(
       'UPDATE usuarios SET intentos_fallidos = 0, bloqueado_hasta = NULL WHERE id = ?',

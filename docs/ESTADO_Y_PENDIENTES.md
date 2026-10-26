@@ -14,6 +14,7 @@ Corte: 2026-10-26 (HEAD `80cecd6`, rama `main`). Avance estimado: ~85 %.
 - `schema.sql` verificado idéntico a la BD real; seed/limpieza/reset; `VITE_API_URL`.
 - Docs: README, DEPLOY.md, comandos.txt; manual Windows (DEPLOY_windows.md, entregado en chat); bitácora de iteración y entregable del curso (fuera del repo).
 - Verificado E2E desde BD vacía (schema + seed + login + PDF + correcciones + IP) en sandbox con MariaDB.
+- Corregidos (rama `fix/bugs-criticos-despliegue`): reportes usaban `localhost:3001` fijo en vez de `VITE_API_URL`; usuarios dados de baja podían iniciar sesión (y sus tokens sin expiración seguían válidos); crear un periodo lo dejaba activo junto con el anterior. En una BD que ya tenga dos periodos activos, activar de nuevo el correcto desde el panel deja solo ese.
 
 ## En curso: instalación en PC de equipo / servidor Windows
 
