@@ -5,6 +5,9 @@ Para los integrantes del equipo que quieran correr la aplicación completa en su
 - Tiempo estimado la primera vez: 30 a 45 minutos.
 - Sistema: Windows 10/11. Todos los comandos son para **PowerShell**.
 - Todo lo que se instala aquí usa datos **ficticios**. Nunca cargues datos reales de estudiantes en tu equipo.
+- Pega **un bloque de comandos a la vez** y espera a que termine antes de pegar el siguiente.
+
+> **Si usas la terminal de VS Code:** VS Code guarda el PATH de cuando se abrió. Cada vez que la guía diga "cierra y vuelve a abrir PowerShell", cierra **VS Code completo** (Archivo → Salir) y vuelve a abrirlo; abrir otra terminal dentro de VS Code no basta.
 
 ¿Ya la tienes instalada y solo quieres ponerla al día? Ve a la sección 10.
 
@@ -25,26 +28,39 @@ Cierra PowerShell, ábrelo de nuevo (ya no hace falta como administrador) e inst
 npm install -g pnpm
 ```
 
+Asegura que la carpeta donde npm instala pnpm quede en el PATH (si ya estaba, no pasa nada):
+
+```powershell
+$npmDir = npm prefix -g
+if (([Environment]::GetEnvironmentVariable('Path', 'User') -split ';') -notcontains $npmDir) {
+  [Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path', 'User') + ";$npmDir", 'User')
+}
+$env:Path += ";$npmDir"
+pnpm -v
+```
+
 Si aparece el error `npm.ps1 cannot be loaded because running scripts is disabled`, ejecuta esto una vez y repite el comando:
 
 ```powershell
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 ```
 
-### MySQL 8.0
+### MySQL 8.0 u 8.4
 
 1. Descarga **MySQL Installer for Windows** desde https://dev.mysql.com/downloads/installer/ (el instalador grande, "mysql-installer-community").
-2. En el tipo de instalación elige **Server only** (o **Custom** y marca *MySQL Server 8.0*).
+2. En el tipo de instalación elige **Server only** (o **Custom** y marca *MySQL Server*). La 8.0 y la 8.4 funcionan igual con la app.
 3. En la configuración deja el puerto **3306**, define una **contraseña para root** y anótala; la vas a necesitar.
 4. Deja marcada la opción de que MySQL arranque como servicio de Windows al encender el equipo.
 
-Para que PowerShell reconozca el comando `mysql`, agrégalo al PATH de tu usuario (una sola vez):
+Para que PowerShell reconozca el comando `mysql`, agrégalo al PATH de tu usuario (una sola vez). El comando encuentra solo la carpeta, sea 8.0 u 8.4, y la muestra al final; si muestra un error o nada, MySQL no está instalado:
 
 ```powershell
-[Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path', 'User') + ';C:\Program Files\MySQL\MySQL Server 8.0\bin', 'User')
+$bin = (Get-ChildItem "C:\Program Files\MySQL\MySQL Server *\bin" | Select-Object -First 1).FullName
+[Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path', 'User') + ";$bin", 'User')
+$bin
 ```
 
-Cierra y vuelve a abrir PowerShell, y verifica que todo responde:
+Cierra y vuelve a abrir PowerShell (o VS Code completo), y verifica que todo responde:
 
 ```powershell
 git --version
@@ -90,21 +106,24 @@ cd C:\DualCheckApp\server
 pnpm install
 ```
 
-Crea el archivo `server\.env`. El primer comando genera una clave secreta y el segundo te pide la contraseña de root de MySQL:
+Crea el archivo `server\.env`. En la primera línea cambia `CONTRASENA_DE_ROOT` por tu contraseña de root de MySQL, **dejando las comillas simples**, y pega el bloque completo:
 
 ```powershell
+$dbPass = 'CONTRASENA_DE_ROOT'
 $jwt = node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-$dbPass = Read-Host "Contraseña de root de MySQL"
 Set-Content -Path .env -Encoding ascii -Value @(
   'PORT=3001',
   "JWT_SECRET=$jwt",
   'DB_HOST=localhost',
   'DB_USER=root',
-  "DB_PASSWORD=`"$dbPass`"",
+  ('DB_PASSWORD="' + $dbPass + '"'),
   'DB_NAME=dualcheck_db',
   'IP_EQUIPO_ESTUDIANTE='
 )
+Get-Content .env
 ```
+
+La última línea muestra el archivo: revisa que `DB_PASSWORD="..."` tenga tu contraseña entre las comillas.
 
 > Usa `Set-Content -Encoding ascii`, **no** `Out-File`: en PowerShell 5.1 `Out-File` agrega un carácter invisible (BOM) al inicio y el servidor deja de leer la primera variable.
 >
@@ -285,7 +304,10 @@ Remove-Item C:\DualCheckApp\client\.env.local
 
 | Síntoma | Causa | Solución |
 |---|---|---|
-| `mysql` no se reconoce | MySQL no está en el PATH | Sección 1, comando del PATH, y reabrir PowerShell |
+| `npm` no se reconoce | Node no está instalado, o la terminal no se reabrió | Revisa con `Test-Path "C:\Program Files\nodejs\node.exe"`; si es `False`, instala Node (sección 1). Luego cierra VS Code o PowerShell completo |
+| `pnpm` no se reconoce (pero antes funcionaba) | La carpeta de npm no quedó en el PATH | Sección 1, bloque de `npm prefix -g` |
+| `mysql` no se reconoce | MySQL no está en el PATH | Sección 1, comando del PATH, y reabrir PowerShell o VS Code completo |
+| `Access denied ... (using password: NO)` | La contraseña quedó vacía en el `.env` | Repite la sección 4 y revisa la salida de `Get-Content .env` |
 | `npm.ps1 cannot be loaded` | Política de ejecución de PowerShell | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` |
 | `Access denied for user 'root'@'localhost'` | La contraseña del `.env` no coincide con la de MySQL | Repite la sección 4 |
 | `Error conectando a MySQL: connect ECONNREFUSED` | El servicio de MySQL está apagado | Abre "Servicios" de Windows (`services.msc`) e inicia **MySQL80** |
