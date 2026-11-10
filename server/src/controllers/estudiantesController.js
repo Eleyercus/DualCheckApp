@@ -2,6 +2,7 @@ const db = require('../config/db')
 const bcrypt = require('bcryptjs')
 const xlsx = require('xlsx')
 const ExcelJS = require('exceljs')
+const { responderError, CORREO_VALIDO, recortar } = require('../utils/errores')
 
 // ── Carga masiva: columnas aceptadas ────────────────────────────────────────
 // Por campo, los nombres de columna aceptados. El primero es el de la plantilla
@@ -166,15 +167,23 @@ const crearEstudiante = async (req, res) => {
     nombre_estadia, nombre_empresa, rfc, nombre_responsable,
     puesto_responsable, emp_direccion, emp_colonia, emp_cp,
     emp_telefono, emp_correo, giro, tamano, regimen_juridico
-  } = req.body
+  } = recortar(req.body)
 
   if (!matricula || !nombre || !apellido_p || !correo_personal) {
     return res.status(400).json({ error: 'Matrícula, nombre, apellido paterno y correo personal son requeridos' })
+  }
+  if (!CORREO_VALIDO.test(correo_personal)) {
+    return res.status(400).json({ error: 'El correo personal no tiene un formato válido' })
+  }
+  if (sexo && !['M', 'F'].includes(sexo)) {
+    return res.status(400).json({ error: 'El sexo debe ser M o F' })
   }
 
   try {
     const [existe] = await db.query('SELECT id FROM usuarios WHERE correo = ?', [correo_personal])
     if (existe.length > 0) return res.status(400).json({ error: 'El correo ya está registrado' })
+    const [matriculaExiste] = await db.query('SELECT id FROM estudiantes WHERE matricula = ?', [matricula])
+    if (matriculaExiste.length > 0) return res.status(400).json({ error: `La matrícula ${matricula} ya está registrada` })
 
     const password_hash = await bcrypt.hash(matricula, 10)
     const conn = await db.getConnection()
@@ -227,8 +236,7 @@ const crearEstudiante = async (req, res) => {
       throw err
     }
   } catch (error) {
-    console.error('Error creando estudiante:', error)
-    res.status(500).json({ error: 'Error interno del servidor' })
+    responderError(res, error, 'creando estudiante')
   }
 }
 
@@ -237,11 +245,12 @@ const actualizarRequisitos = async (req, res) => {
   const { req_datos_estadia, req_carta_no_adeudo, req_carta_servicios } = req.body
 
   try {
-    await db.query(`
+    const [resultado] = await db.query(`
       UPDATE estudiantes 
       SET req_datos_estadia = ?, req_carta_no_adeudo = ?, req_carta_servicios = ?
       WHERE id = ?
     `, [req_datos_estadia ? 1 : 0, req_carta_no_adeudo ? 1 : 0, req_carta_servicios ? 1 : 0, id])
+    if (resultado.affectedRows === 0) return res.status(404).json({ error: 'Estudiante no encontrado' })
 
     await db.query(
       'INSERT INTO bitacora (id_usuario, accion, entidad_afectada, detalle) VALUES (?, ?, ?, ?)',
@@ -261,9 +270,12 @@ const actualizarEmpresa = async (req, res) => {
     nombre_estadia, nombre_empresa, rfc, nombre_responsable, puesto_responsable,
     emp_direccion, emp_colonia, emp_cp, emp_telefono, emp_correo,
     giro, tamano, regimen_juridico
-  } = req.body
+  } = recortar(req.body)
 
   try {
+    const [estudiante] = await db.query('SELECT id FROM estudiantes WHERE id = ?', [id])
+    if (estudiante.length === 0) return res.status(404).json({ error: 'Estudiante no encontrado' })
+
     const [existe] = await db.query('SELECT id FROM empresas_estadia WHERE id_estudiante = ?', [id])
 
     if (existe.length > 0) {
@@ -299,29 +311,68 @@ const actualizarEmpresa = async (req, res) => {
 
     res.json({ mensaje: 'Datos de empresa actualizados correctamente' })
   } catch (error) {
-    console.error('Error actualizando empresa:', error)
-    res.status(500).json({ error: 'Error interno del servidor' })
+    responderError(res, error, 'actualizando empresa')
   }
+}
+
+// Cambia el estatus especial y lo mantiene coherente con el acceso al sistema:
+// baja y baja por reprobación quitan el acceso y cancelan la asignación activa;
+// activo y reincorporado lo restauran (el reincorporado vuelve a quedar
+// pendiente de asignar porque su asignación anterior quedó cancelada).
+const ESTATUS_ESPECIALES = ['activo', 'baja', 'baja_reprobacion', 'reincorporado']
+const ES_BAJA = e => e === 'baja' || e === 'baja_reprobacion'
+
+const aplicarEstatus = async (idEstudiante, estatus, idAdmin) => {
+  const [estudiante] = await db.query('SELECT id_usuario, matricula FROM estudiantes WHERE id = ?', [idEstudiante])
+  if (estudiante.length === 0) return null
+
+  const conn = await db.getConnection()
+  try {
+    await conn.beginTransaction()
+    await conn.query('UPDATE estudiantes SET estatus_especial = ? WHERE id = ?', [estatus, idEstudiante])
+    await conn.query('UPDATE usuarios SET estatus = ? WHERE id = ?', [ES_BAJA(estatus) ? 0 : 1, estudiante[0].id_usuario])
+    let canceladas = 0
+    if (ES_BAJA(estatus)) {
+      const [r] = await conn.query("UPDATE asignaciones SET estatus = 'cancelada' WHERE id_estudiante = ? AND estatus = 'activa'", [idEstudiante])
+      canceladas = r.affectedRows
+    }
+    await conn.query(
+      'INSERT INTO bitacora (id_usuario, accion, entidad_afectada, detalle) VALUES (?, ?, ?, ?)',
+      [idAdmin, ES_BAJA(estatus) ? 'BAJA_ESTUDIANTE' : 'CAMBIO_ESTATUS', 'estudiantes',
+        `Estudiante ${estudiante[0].matricula}: estatus ${estatus}${canceladas ? `, ${canceladas} asignación cancelada` : ''}`]
+    )
+    await conn.commit()
+    return { canceladas }
+  } catch (err) {
+    await conn.rollback()
+    throw err
+  } finally {
+    conn.release()
+  }
+}
+
+const MENSAJE_ESTATUS = {
+  activo: 'Estatus actualizado: el estudiante está activo y puede iniciar sesión.',
+  reincorporado: 'Estudiante reincorporado: puede iniciar sesión y queda pendiente de asignar asesor.',
+  baja: 'Estudiante dado de baja: ya no puede iniciar sesión.',
+  baja_reprobacion: 'Baja por reprobación registrada: el estudiante ya no puede iniciar sesión.',
 }
 
 const actualizarEstatusEspecial = async (req, res) => {
   const { id } = req.params
   const { estatus_especial } = req.body
 
-  const estatusValidos = ['activo', 'baja', 'baja_reprobacion', 'reincorporado']
-  if (!estatusValidos.includes(estatus_especial)) {
+  if (!ESTATUS_ESPECIALES.includes(estatus_especial)) {
     return res.status(400).json({ error: 'Estatus no válido' })
   }
 
   try {
-    await db.query('UPDATE estudiantes SET estatus_especial = ? WHERE id = ?', [estatus_especial, id])
-
-    await db.query(
-      'INSERT INTO bitacora (id_usuario, accion, entidad_afectada, detalle) VALUES (?, ?, ?, ?)',
-      [req.usuario.id, 'CAMBIO_ESTATUS', 'estudiantes', `Estatus cambiado a ${estatus_especial} para estudiante ${id}`]
-    )
-
-    res.json({ mensaje: 'Estatus actualizado correctamente' })
+    const resultado = await aplicarEstatus(id, estatus_especial, req.usuario.id)
+    if (!resultado) return res.status(404).json({ error: 'Estudiante no encontrado' })
+    res.json({
+      mensaje: MENSAJE_ESTATUS[estatus_especial] +
+        (resultado.canceladas ? ' Su asignación activa se canceló.' : '')
+    })
   } catch (error) {
     console.error('Error actualizando estatus:', error)
     res.status(500).json({ error: 'Error interno del servidor' })
@@ -455,18 +506,12 @@ const cargaMasiva = async (req, res) => {
 const bajaEstudiante = async (req, res) => {
   const { id } = req.params
   try {
-    const [estudiante] = await db.query('SELECT id_usuario FROM estudiantes WHERE id = ?', [id])
-    if (estudiante.length === 0) return res.status(404).json({ error: 'Estudiante no encontrado' })
-
-    await db.query('UPDATE usuarios SET estatus = 0 WHERE id = ?', [estudiante[0].id_usuario])
-    await db.query('UPDATE estudiantes SET estatus_especial = ? WHERE id = ?', ['baja', id])
-
-    await db.query(
-      'INSERT INTO bitacora (id_usuario, accion, entidad_afectada, detalle) VALUES (?, ?, ?, ?)',
-      [req.usuario.id, 'BAJA_ESTUDIANTE', 'estudiantes', `Baja del estudiante con id ${id}`]
-    )
-
-    res.json({ mensaje: 'Estudiante dado de baja correctamente' })
+    const resultado = await aplicarEstatus(id, 'baja', req.usuario.id)
+    if (!resultado) return res.status(404).json({ error: 'Estudiante no encontrado' })
+    res.json({
+      mensaje: 'Estudiante dado de baja correctamente' +
+        (resultado.canceladas ? '. Su asignación activa se canceló.' : '')
+    })
   } catch (error) {
     console.error('Error dando de baja:', error)
     res.status(500).json({ error: 'Error interno del servidor' })

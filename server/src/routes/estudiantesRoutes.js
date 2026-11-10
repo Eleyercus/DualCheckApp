@@ -8,7 +8,7 @@ const {
   cargaMasiva, bajaEstudiante, descargarPlantilla
 } = require('../controllers/estudiantesController')
 
-const upload = multer({ storage: multer.memoryStorage() })
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } })
 
 router.get('/', verificarToken, soloAdmin, getEstudiantes)
 router.get('/plantilla', verificarToken, soloAdmin, descargarPlantilla)

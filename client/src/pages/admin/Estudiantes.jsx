@@ -34,7 +34,8 @@ const FORM_INICIAL = {
 }
 
 // ─── Componente Detalle (separado para poder usar hooks) ────────────────────
-function DetalleEstudiante({ estudiante: e, onVolver, onActualizarRequisitos, onBaja, mensaje, error }) {
+function DetalleEstudiante({ estudiante: e, onVolver, onActualizarRequisitos, onBaja, onCambiarEstatus, mensaje, error }) {
+  const [estatusLocal, setEstatusLocal] = useState(e.estatus_especial || 'activo')
   const [reqLocal, setReqLocal] = useState({
     req_datos_estadia: !!e.req_datos_estadia,
     req_carta_no_adeudo: !!e.req_carta_no_adeudo,
@@ -157,17 +158,33 @@ function DetalleEstudiante({ estudiante: e, onVolver, onActualizarRequisitos, on
           )}
         </div>
 
-        {/* Zona de riesgo */}
-        {e.estatus ? (
-          <div className="card" style={{ gridColumn: '1 / -1', borderTop: '3px solid #dc2626' }}>
-            <h3 style={{ fontSize: '13px', fontWeight: '600', color: '#991b1b', marginBottom: '10px' }}>
-              Zona de riesgo
-            </h3>
-            <button className="btn-peligro" onClick={() => onBaja(e.id)}>
-              Dar de baja al estudiante
+        {/* Estatus: las bajas quitan el acceso y cancelan la asignación; reincorporar lo restaura */}
+        <div className="card" style={{ gridColumn: '1 / -1', borderTop: '3px solid var(--dorado)' }}>
+          <h3 style={{ fontSize: '13px', fontWeight: '600', color: 'var(--verde-oscuro)', marginBottom: '10px' }}>
+            Estatus del estudiante
+          </h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <select className="filtro-select" value={estatusLocal} onChange={ev => setEstatusLocal(ev.target.value)}
+              aria-label="Estatus del estudiante">
+              {Object.entries(BADGE_ESTATUS).map(([valor, { label }]) => (
+                <option key={valor} value={valor}>{label}</option>
+              ))}
+            </select>
+            <button className="btn-secundario" style={{ fontSize: '12px' }}
+              disabled={estatusLocal === (e.estatus_especial || 'activo')}
+              onClick={() => onCambiarEstatus(e.id, estatusLocal)}>
+              Guardar estatus
             </button>
+            {e.estatus ? (
+              <button className="btn-peligro" onClick={() => onBaja(e.id)}>
+                Dar de baja al estudiante
+              </button>
+            ) : null}
           </div>
-        ) : null}
+          <p style={{ fontSize: '11px', color: 'var(--texto-muted)', marginTop: '8px' }}>
+            Baja y Baja por reprobación quitan el acceso y cancelan su asignación activa. Activo y Reincorporado restauran el acceso; el reincorporado queda pendiente de asignar asesor.
+          </p>
+        </div>
       </div>
     </div>
   )
@@ -223,6 +240,16 @@ export default function Estudiantes({ periodoInicial = 'activo' }) {
 
   const resetForm = () => { setForm({ ...FORM_INICIAL }); setTabForm('datos') }
 
+  // Paso 1 del alta: obligatorios y formato del correo antes de avanzar
+  const validarDatosPersonales = () => {
+    const faltan = [['matricula', 'Matrícula'], ['correo_personal', 'Correo personal'], ['nombre', 'Nombre(s)'], ['apellido_p', 'Apellido paterno']]
+      .filter(([k]) => !String(form[k] || '').trim()).map(([, label]) => label)
+    if (faltan.length > 0) { setError(`Completa los campos obligatorios: ${faltan.join(', ')}`); return false }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.correo_personal.trim())) { setError('El correo personal no tiene un formato válido'); return false }
+    setError('')
+    return true
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault(); limpiar()
     try {
@@ -231,7 +258,10 @@ export default function Estudiantes({ periodoInicial = 'activo' }) {
       resetForm()
       setVista('lista')
       cargar()
-    } catch (err) { setError(err.response?.data?.error || 'Error al registrar') }
+    } catch (err) {
+      setError(err.response?.data?.error || 'Error al registrar')
+      document.getElementById('encabezado-nuevo-estudiante')?.scrollIntoView({ behavior: 'smooth' })
+    }
   }
 
   const handleCargaMasiva = async () => {
@@ -271,6 +301,18 @@ export default function Estudiantes({ periodoInicial = 'activo' }) {
     } catch { setError('Error al dar de baja') }
   }
 
+  const handleCambiarEstatus = async (id, estatus) => {
+    if ((estatus === 'baja' || estatus === 'baja_reprobacion') &&
+      !confirm('El estudiante perderá el acceso y se cancelará su asignación activa. ¿Continuar?')) return
+    limpiar()
+    try {
+      const res = await api.patch(`/estudiantes/${id}/estatus-especial`, { estatus_especial: estatus })
+      await abrirDetalle(id)
+      setMensaje(res.data.mensaje)
+      cargar()
+    } catch (err) { setError(err.response?.data?.error || 'Error al actualizar el estatus') }
+  }
+
   const abrirDetalle = async (id) => {
     try {
       const res = await api.get(`/estudiantes/${id}`)
@@ -281,7 +323,7 @@ export default function Estudiantes({ periodoInicial = 'activo' }) {
   }
 
   const cumpleRequisitos = (e) => e.req_datos_estadia && e.req_carta_no_adeudo && e.req_carta_servicios
-  const activos = estudiantes.filter(e => e.estatus && e.estatus_especial === 'activo').length
+  const activos = estudiantes.filter(e => e.estatus && ['activo', 'reincorporado'].includes(e.estatus_especial)).length
   const sinRequisitos = estudiantes.filter(e => e.estatus && !cumpleRequisitos(e)).length
 
   // ── Búsqueda y filtros de la tabla ──────────────────────────────────────
@@ -334,6 +376,7 @@ export default function Estudiantes({ periodoInicial = 'activo' }) {
         onVolver={() => { setVista('lista'); setEstudianteDetalle(null); limpiar() }}
         onActualizarRequisitos={handleActualizarRequisitos}
         onBaja={handleBaja}
+        onCambiarEstatus={handleCambiarEstatus}
       />
     )
   }
@@ -346,7 +389,7 @@ export default function Estudiantes({ periodoInicial = 'activo' }) {
           style={{ background: 'none', border: 'none', color: 'var(--verde)', cursor: 'pointer', fontSize: '13px' }}>
           ← Volver
         </button>
-        <h2 style={{ fontSize: '1.1rem', fontWeight: '700', color: 'var(--verde-oscuro)' }}>
+        <h2 id="encabezado-nuevo-estudiante" style={{ fontSize: '1.1rem', fontWeight: '700', color: 'var(--verde-oscuro)' }}>
           Registrar nuevo estudiante
         </h2>
       </div>
@@ -410,7 +453,7 @@ export default function Estudiantes({ periodoInicial = 'activo' }) {
               </div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
-              <button type="button" className="btn-primario" onClick={() => setTabForm('requisitos')}>
+              <button type="button" className="btn-primario" onClick={() => validarDatosPersonales() && setTabForm('requisitos')}>
                 Siguiente →
               </button>
             </div>

@@ -94,11 +94,20 @@ const crearAsignacion = async (req, res) => {
     }
     const idPeriodo = periodoActivo[0].id
 
-    const [est] = await db.query(
-      'SELECT req_datos_estadia, req_carta_no_adeudo, req_carta_servicios, nombre, apellido_p FROM estudiantes WHERE id = ?',
-      [id_estudiante]
-    )
+    const [est] = await db.query(`
+      SELECT e.req_datos_estadia, e.req_carta_no_adeudo, e.req_carta_servicios, e.nombre, e.apellido_p, u.estatus
+      FROM estudiantes e JOIN usuarios u ON e.id_usuario = u.id
+      WHERE e.id = ?
+    `, [id_estudiante])
     if (est.length === 0) return res.status(404).json({ error: 'Estudiante no encontrado' })
+    if (!est[0].estatus) return res.status(400).json({ error: 'El estudiante está dado de baja; reincorpóralo antes de asignarlo.' })
+
+    const [doc] = await db.query(
+      'SELECT u.estatus FROM docentes d JOIN usuarios u ON d.id_usuario = u.id WHERE d.id = ?',
+      [id_docente]
+    )
+    if (doc.length === 0) return res.status(404).json({ error: 'Docente no encontrado' })
+    if (!doc[0].estatus) return res.status(400).json({ error: 'El docente está dado de baja.' })
 
     const { req_datos_estadia, req_carta_no_adeudo, req_carta_servicios, nombre, apellido_p } = est[0]
 
@@ -142,9 +151,12 @@ const crearAsignacion = async (req, res) => {
 const cancelarAsignacion = async (req, res) => {
   const { id } = req.params
   try {
-    const [asignacion] = await db.query('SELECT id FROM asignaciones WHERE id = ?', [id])
+    const [asignacion] = await db.query('SELECT id, estatus FROM asignaciones WHERE id = ?', [id])
     if (asignacion.length === 0) {
       return res.status(404).json({ error: 'Asignación no encontrada' })
+    }
+    if (asignacion[0].estatus !== 'activa') {
+      return res.status(400).json({ error: `La asignación ya está ${asignacion[0].estatus}; solo se pueden cancelar asignaciones activas.` })
     }
 
     await db.query('UPDATE asignaciones SET estatus = ? WHERE id = ?', ['cancelada', id])

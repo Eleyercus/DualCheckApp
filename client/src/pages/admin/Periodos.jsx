@@ -50,6 +50,7 @@ export default function Periodos({ onVerAlumnos }) {
   }
 
   const desactivarPeriodo = async (id) => {
+    if (!confirm('Sin un periodo activo no se pueden hacer asignaciones nuevas ni cargar estudiantes al periodo. ¿Desactivar?')) return
     limpiar()
     try {
       await api.patch(`/periodos/${id}/estatus`, { activo: false })

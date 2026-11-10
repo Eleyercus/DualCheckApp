@@ -48,7 +48,7 @@ export default function Docentes() {
       await api.patch(`/docentes/${id}/baja`)
       setMensaje('Docente dado de baja correctamente')
       cargar()
-    } catch { setError('Error al dar de baja') }
+    } catch (err) { setError(err.response?.data?.error || 'Error al dar de baja') }
   }
 
   const activos = docentes.filter(d => d.estatus).length

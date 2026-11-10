@@ -41,6 +41,10 @@ const crearPeriodo = async (req, res) => {
     return res.status(400).json({ error: 'Nombre, fecha de inicio y fecha de fin son requeridos' })
   }
 
+  if (Number.isNaN(new Date(fecha_inicio).getTime()) || Number.isNaN(new Date(fecha_fin).getTime())) {
+    return res.status(400).json({ error: 'Las fechas no tienen un formato válido' })
+  }
+
   if (new Date(fecha_inicio) >= new Date(fecha_fin)) {
     return res.status(400).json({ error: 'La fecha de inicio debe ser anterior a la fecha de fin' })
   }
@@ -80,12 +84,22 @@ const cambiarEstatusPeriodo = async (req, res) => {
   const { activo } = req.body
 
   try {
-    if (activo) {
-      // Desactivar todos los demás periodos antes de activar este
-      await db.query('UPDATE periodos SET activo = 0')
-    }
+    const [periodo] = await db.query('SELECT id FROM periodos WHERE id = ?', [id])
+    if (periodo.length === 0) return res.status(404).json({ error: 'Periodo no encontrado' })
 
-    await db.query('UPDATE periodos SET activo = ? WHERE id = ?', [activo ? 1 : 0, id])
+    // En una transacción: si algo falla, no se queda el sistema sin periodo activo
+    const conn = await db.getConnection()
+    try {
+      await conn.beginTransaction()
+      if (activo) await conn.query('UPDATE periodos SET activo = 0')
+      await conn.query('UPDATE periodos SET activo = ? WHERE id = ?', [activo ? 1 : 0, id])
+      await conn.commit()
+    } catch (err) {
+      await conn.rollback()
+      throw err
+    } finally {
+      conn.release()
+    }
 
     await db.query(
       'INSERT INTO bitacora (id_usuario, accion, entidad_afectada, detalle) VALUES (?, ?, ?, ?)',

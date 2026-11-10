@@ -5,6 +5,11 @@ import api from '../../services/api'
 
 const SEMANAS = Array.from({ length: 13 }, (_, i) => i + 1)
 
+// El panel se usa en un equipo compartido de recepción: la sesión se cierra sola
+// unos segundos después de confirmar y tras un rato sin actividad
+const SEGUNDOS_TRAS_CONFIRMAR = 10
+const SEGUNDOS_INACTIVIDAD = 90
+
 export default function EstudianteDashboard() {
   const { usuario, logout } = useAuth()
   const navigate = useNavigate()
@@ -13,8 +18,35 @@ export default function EstudianteDashboard() {
   const [error, setError] = useState('')
   const [mensaje, setMensaje] = useState('')
   const [confirmando, setConfirmando] = useState(null)
+  const [cuentaRegresiva, setCuentaRegresiva] = useState(null)
 
   useEffect(() => { cargar() }, [])
+
+  // Cierre por inactividad: cualquier toque, tecla o desplazamiento reinicia el contador
+  useEffect(() => {
+    let temporizador
+    const reiniciar = () => {
+      clearTimeout(temporizador)
+      temporizador = setTimeout(() => { logout(); navigate('/') }, SEGUNDOS_INACTIVIDAD * 1000)
+    }
+    const eventos = ['pointerdown', 'keydown', 'touchstart', 'scroll']
+    eventos.forEach(e => window.addEventListener(e, reiniciar))
+    reiniciar()
+    return () => {
+      clearTimeout(temporizador)
+      eventos.forEach(e => window.removeEventListener(e, reiniciar))
+    }
+  }, [logout, navigate])
+
+  // Cuenta regresiva después de confirmar
+  useEffect(() => {
+    if (cuentaRegresiva === null) return
+    const t = setTimeout(() => {
+      if (cuentaRegresiva <= 1) { logout(); navigate('/') }
+      else setCuentaRegresiva(cuentaRegresiva - 1)
+    }, 1000)
+    return () => clearTimeout(t)
+  }, [cuentaRegresiva, logout, navigate])
 
   const cargar = async () => {
     try {
@@ -37,6 +69,7 @@ export default function EstudianteDashboard() {
         `/asistencia/asignacion/${datos.id_asignacion}/semana/${semana}/estudiante`
       )
       setMensaje(res.data.mensaje)
+      setCuentaRegresiva(SEGUNDOS_TRAS_CONFIRMAR)
       cargar()
     } catch (err) {
       setError(err.response?.data?.error || 'Error al confirmar asistencia')
@@ -113,11 +146,35 @@ export default function EstudianteDashboard() {
       {/* Bienvenida */}
       <div style={styles.bienvenida}>
         <p style={styles.bienvenidaLabel}>Bienvenido</p>
-        <h1 style={styles.bienvenidaNombre}>{usuario?.correo}</h1>
+        <h1 style={styles.bienvenidaNombre}>{datos?.estudiante || usuario?.correo}</h1>
+        {datos?.docente && (
+          <p style={{ ...styles.bienvenidaLabel, marginTop: '6px', textTransform: 'none', letterSpacing: 0 }}>
+            Asesor: {datos.docente} · {datos.periodo_nombre}
+          </p>
+        )}
       </div>
 
       <div style={styles.content}>
         {/* Alertas */}
+        {cuentaRegresiva !== null && (
+          <div role="status" style={{
+            ...styles.alerta, background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '8px',
+            padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: '12px', flexWrap: 'wrap'
+          }}>
+            <span style={{ fontSize: '15px', color: '#166534', fontWeight: '600' }}>
+              Tu sesión se cerrará en {cuentaRegresiva} s para el siguiente compañero.
+            </span>
+            <span style={{ display: 'flex', gap: '8px' }}>
+              <button type="button" className="btn-secundario" onClick={() => setCuentaRegresiva(null)}>
+                Seguir aquí
+              </button>
+              <button type="button" className="btn-primario" onClick={handleLogout}>
+                Cerrar ahora
+              </button>
+            </span>
+          </div>
+        )}
         {mensaje && (
           <div className="alerta-exito" style={styles.alerta}>
             ✓ {mensaje}

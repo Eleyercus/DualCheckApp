@@ -29,9 +29,9 @@ export default function Login() {
   }
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: '#F4F6F4' }}>
+    <div className="login-contenedor" style={{ display: 'flex', minHeight: '100vh', background: '#F4F6F4' }}>
       {/* Panel izquierdo verde */}
-      <div style={{
+      <div className="login-panel" style={{
         width: '42%', background: 'var(--verde)',
         display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center',
@@ -62,18 +62,19 @@ export default function Login() {
             Bienvenido
           </h2>
           <p style={{ color: 'var(--texto-muted)', fontSize: '13px', marginBottom: '2rem' }}>
-            Ingresa con tu cuenta institucional
+            Ingresa con tu correo y contraseña
           </p>
 
           {error && <div className="alerta-error">{error}</div>}
 
           <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div className="form-campo">
-              <label className="form-label">Correo institucional</label>
+              <label className="form-label" htmlFor="login-correo">Correo electrónico</label>
               <input
                 className="form-input"
                 type="email"
-                placeholder="usuario@utcadereyta.edu.mx"
+                id="login-correo"
+                placeholder="correo@ejemplo.com"
                 value={correo}
                 onChange={e => setCorreo(e.target.value)}
                 required

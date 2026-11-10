@@ -17,6 +17,8 @@ const getDatosEstudiante = async (id_estudiante, id_periodo) => {
     JOIN docentes d ON a.id_docente = d.id
     JOIN periodos p ON a.id_periodo = p.id
     WHERE e.id = ? AND a.id_periodo = ?
+    ORDER BY a.estatus = 'cancelada', a.fecha_asignacion DESC, a.id DESC
+    LIMIT 1
   `, [id_estudiante, id_periodo])
 
   if (est.length === 0) return null

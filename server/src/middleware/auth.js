@@ -5,23 +5,29 @@ const verificarToken = async (req, res, next) => {
   const authHeader = req.headers['authorization']
   const token = authHeader && authHeader.split(' ')[1]
 
+  // 401 = la sesión ya no sirve (el cliente cierra sesión); 403 = sesión válida
+  // pero sin permiso para esa acción (el cliente solo muestra el mensaje)
   if (!token) {
-    return res.status(401).json({ error: 'Acceso denegado. Token requerido.' })
+    return res.status(401).json({ error: 'Acceso denegado. Inicia sesión.' })
   }
 
   let decoded
   try {
     decoded = jwt.verify(token, process.env.JWT_SECRET)
   } catch (error) {
-    return res.status(403).json({ error: 'Token inválido o expirado.' })
+    return res.status(401).json({ error: 'Tu sesión expiró o no es válida. Inicia sesión de nuevo.' })
   }
 
   // Los tokens de docente y administrador no expiran: hay que revisar en cada
   // petición que la cuenta siga activa para que una baja surta efecto de inmediato
   try {
-    const [rows] = await db.query('SELECT estatus FROM usuarios WHERE id = ?', [decoded.id])
+    const [rows] = await db.query('SELECT estatus, requiere_cambio_password FROM usuarios WHERE id = ?', [decoded.id])
     if (rows.length === 0 || rows[0].estatus === 0) {
-      return res.status(403).json({ error: 'Tu cuenta está desactivada.' })
+      return res.status(401).json({ error: 'Tu cuenta está desactivada.' })
+    }
+    // Con la contraseña inicial solo se permiten las rutas de /api/auth (cambiarla)
+    if (rows[0].requiere_cambio_password === 1 && !req.originalUrl.startsWith('/api/auth/')) {
+      return res.status(403).json({ error: 'Debes cambiar tu contraseña antes de continuar.', requiere_cambio_password: true })
     }
   } catch (error) {
     console.error('Error verificando estatus de usuario:', error)
