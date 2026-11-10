@@ -342,26 +342,91 @@ const reportePeriodoExcel = async (req, res) => {
 
 // ── PDF ───────────────────────────────────────────────────────────────────────
 
+// Las fuentes estándar de PDFKit (Helvetica) no incluyen ✓: en los PDF se usa texto
+const MARCA_PDF = { completa: 'Sí', soloDocente: 'D', sinRegistro: '-' }
+const COLOR_TOTAL = total => total === 13 ? '#166534' : total >= 7 ? '#D97706' : '#DC2626'
+const ESTATUS_ASIGNACION = { activa: 'Activa', concluida: 'Concluida', cancelada: 'Cancelada' }
+const LIMITE_INFERIOR = 50 // espacio libre al pie de cada página
+
 const pdfHeader = (doc, titulo, subtitulo) => {
   doc.rect(0, 0, doc.page.width, 70).fill('#1F5C2E')
   doc.fontSize(18).fillColor('#FFFFFF').font('Helvetica-Bold')
     .text('DualCheck UT', 40, 18)
-  doc.fontSize(9).fillColor('rgba(255,255,255,0.7)').font('Helvetica')
+  doc.fontSize(9).fillColor('#DDE7DF').font('Helvetica')
     .text('Universidad Tecnológica Cadereyta', 40, 40)
   doc.fontSize(9).fillColor('#C9A84C')
     .text(`Generado: ${new Date().toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })}`, 40, 54)
 
   doc.fillColor('#1F5C2E').fontSize(14).font('Helvetica-Bold')
-    .text(titulo, 40, 85)
+    .text(titulo, 40, 85, { width: doc.page.width - 80, height: 18, ellipsis: true })
   doc.fillColor('#6B7280').fontSize(10).font('Helvetica')
-    .text(subtitulo, 40, 104)
+    .text(subtitulo, 40, 104, { width: doc.page.width - 80, height: 13, ellipsis: true })
   doc.rect(40, 118, doc.page.width - 80, 2).fill('#C9A84C')
-  doc.moveDown(2)
 }
 
-const pdfInfoRow = (doc, label, value, x, y) => {
-  doc.fontSize(9).font('Helvetica-Bold').fillColor('#374151').text(label, x, y)
-  doc.fontSize(9).font('Helvetica').fillColor('#6B7280').text(value, x + 90, y)
+// "Etiqueta: valor" en una línea: el valor empieza después de la etiqueta y se
+// recorta con "…" si no cabe en el ancho disponible
+const pdfInfoRow = (doc, label, value, x, y, ancho = 250) => {
+  doc.fontSize(9).font('Helvetica-Bold').fillColor('#374151')
+  const anchoEtiqueta = doc.widthOfString(label) + 6
+  doc.text(label, x, y, { lineBreak: false })
+  doc.font('Helvetica').fillColor('#6B7280')
+    .text(String(value ?? '-'), x + anchoEtiqueta, y, { width: ancho - anchoEtiqueta, height: 11, ellipsis: true })
+}
+
+// Tabla con altura de fila según su contenido (los textos largos pasan a otra
+// línea sin encimarse) y salto de página que repite el encabezado.
+// columnas: [{ titulo, ancho, alinear }]; filas: [{ celdas: [texto | { texto, color, negrita }], fondo }]
+const pdfTabla = (doc, { x = 40, y, columnas, filas, tamano = 8 }) => {
+  const anchoTotal = columnas.reduce((s, c) => s + c.ancho, 0)
+  const pad = 3
+  const celda = c => (c !== null && typeof c === 'object') ? c : { texto: c }
+
+  const encabezado = (yy) => {
+    doc.font('Helvetica-Bold').fontSize(tamano)
+    const alto = Math.max(...columnas.map(c => doc.heightOfString(c.titulo, { width: c.ancho - pad * 2 }))) + pad * 2 + 2
+    doc.rect(x, yy, anchoTotal, alto).fill('#1F5C2E')
+    let cx = x
+    for (const c of columnas) {
+      doc.fillColor('#FFFFFF').text(c.titulo, cx + pad, yy + pad + 1, { width: c.ancho - pad * 2, align: 'center' })
+      cx += c.ancho
+    }
+    return yy + alto
+  }
+
+  let cy = encabezado(y)
+  filas.forEach((fila, idx) => {
+    doc.fontSize(tamano)
+    const alto = Math.max(...fila.celdas.map((c, i) => {
+      const t = celda(c)
+      doc.font(t.negrita ? 'Helvetica-Bold' : 'Helvetica')
+      return doc.heightOfString(String(t.texto ?? ''), { width: columnas[i].ancho - pad * 2 })
+    })) + pad * 2
+
+    if (cy + alto > doc.page.height - LIMITE_INFERIOR) {
+      doc.addPage()
+      cy = encabezado(40)
+    }
+
+    doc.rect(x, cy, anchoTotal, alto).fill(fila.fondo || (idx % 2 === 0 ? '#F4F6F4' : '#FFFFFF'))
+    let cx = x
+    fila.celdas.forEach((c, i) => {
+      const t = celda(c)
+      doc.font(t.negrita ? 'Helvetica-Bold' : 'Helvetica').fontSize(tamano).fillColor(t.color || '#374151')
+        .text(String(t.texto ?? ''), cx + pad, cy + pad, { width: columnas[i].ancho - pad * 2, align: columnas[i].alinear || 'left' })
+      cx += columnas[i].ancho
+    })
+    cy += alto
+  })
+  return cy
+}
+
+// Barra de totales al final de una tabla (pasa a otra página si no cabe)
+const pdfBarraTotal = (doc, texto, y) => {
+  let yy = y + 10
+  if (yy + 24 > doc.page.height - LIMITE_INFERIOR) { doc.addPage(); yy = 40 }
+  doc.rect(40, yy, doc.page.width - 80, 24).fill('#1F5C2E')
+  doc.fontSize(10).font('Helvetica-Bold').fillColor('#FFFFFF').text(texto, 46, yy + 7, { width: doc.page.width - 92 })
 }
 
 // Reporte por estudiante — PDF
@@ -382,43 +447,42 @@ const reporteEstudiantePDF = async (req, res) => {
 
   const y0 = 135
   pdfInfoRow(doc, 'Matrícula:', datos.matricula, 40, y0)
-  pdfInfoRow(doc, 'Correo:', datos.correo, 300, y0)
+  pdfInfoRow(doc, 'Correo:', datos.correo, 300, y0, 272)
   pdfInfoRow(doc, 'Grupo:', datos.grupo || '-', 40, y0 + 16)
-  pdfInfoRow(doc, 'Carrera:', datos.carrera || '-', 300, y0 + 16)
+  pdfInfoRow(doc, 'Carrera:', datos.carrera || '-', 300, y0 + 16, 272)
   pdfInfoRow(doc, 'Asesor:', `${datos.doc_nombre} ${datos.doc_apellido_p}`, 40, y0 + 32)
-  pdfInfoRow(doc, 'Periodo:', `${datos.periodo_nombre} (${formatFecha(datos.fecha_inicio)} — ${formatFecha(datos.fecha_fin)})`, 40, y0 + 48)
-
-  // Tabla de semanas
-  const tableY = y0 + 75
-  const cols = [40, 180, 310, 440]
-  const hdrs = ['Semana', 'Docente', 'Estudiante', 'Estado']
-
-  doc.rect(40, tableY, doc.page.width - 80, 20).fill('#1F5C2E')
-  hdrs.forEach((h, i) => {
-    doc.fontSize(9).font('Helvetica-Bold').fillColor('#FFFFFF')
-      .text(h, cols[i] + 4, tableY + 5, { width: 130 })
-  })
+  pdfInfoRow(doc, 'Asignación:', ESTATUS_ASIGNACION[datos.estatus_asignacion] || datos.estatus_asignacion, 300, y0 + 32, 272)
+  pdfInfoRow(doc, 'Periodo:', `${datos.periodo_nombre} (${formatFecha(datos.fecha_inicio)} — ${formatFecha(datos.fecha_fin)})`, 40, y0 + 48, 532)
 
   const resumen = calcularResumen(datos.asistencia)
-  resumen.forEach((s, idx) => {
-    const ry = tableY + 20 + idx * 18
-    const bg = s.completa ? '#D1FAE5' : idx % 2 === 0 ? '#F4F6F4' : '#FFFFFF'
-    doc.rect(40, ry, doc.page.width - 80, 18).fill(bg)
-    doc.fontSize(9).font('Helvetica').fillColor('#374151')
-      .text(`Semana ${s.semana}`, cols[0] + 4, ry + 4)
-      .text(s.docente === '✓' ? '✓ Registrado' : 'Pendiente', cols[1] + 4, ry + 4)
-      .text(s.estudiante === '✓' ? '✓ Confirmado' : 'Pendiente', cols[2] + 4, ry + 4)
-    const estado = s.completa ? 'Completa' : s.docente === '✓' ? 'Pend. estudiante' : 'Sin registro'
-    const color = s.completa ? '#166534' : s.docente === '✓' ? '#D97706' : '#DC2626'
-    doc.fillColor(color).text(estado, cols[3] + 4, ry + 4)
+  const finTabla = pdfTabla(doc, {
+    y: y0 + 72,
+    tamano: 9,
+    columnas: [
+      { titulo: 'Semana', ancho: 132 },
+      { titulo: 'Docente', ancho: 133 },
+      { titulo: 'Estudiante', ancho: 133 },
+      { titulo: 'Estado', ancho: 134 },
+    ],
+    filas: resumen.map(s => {
+      const docente = s.docente === '✓'
+      return {
+        fondo: s.completa ? '#D1FAE5' : undefined,
+        celdas: [
+          `Semana ${s.semana}`,
+          docente ? 'Registrado' : 'Pendiente',
+          s.estudiante === '✓' ? 'Confirmado' : 'Pendiente',
+          {
+            texto: s.completa ? 'Completa' : docente ? 'Pendiente estudiante' : 'Sin registro',
+            color: s.completa ? '#166534' : docente ? '#D97706' : '#DC2626',
+          },
+        ],
+      }
+    }),
   })
 
-  const totalY = tableY + 20 + 13 * 18 + 10
   const total = resumen.filter(s => s.completa).length
-  doc.rect(40, totalY, doc.page.width - 80, 22).fill('#1F5C2E')
-  doc.fontSize(10).font('Helvetica-Bold').fillColor('#FFFFFF')
-    .text(`Total de semanas validadas: ${total}/13 (${Math.round(total/13*100)}%)`, 44, totalY + 5)
-
+  pdfBarraTotal(doc, `Total de semanas validadas: ${total}/13 (${Math.round(total / 13 * 100)}%)`, finTabla)
   doc.end()
 }
 
@@ -439,44 +503,45 @@ const reporteDocentePDF = async (req, res) => {
   )
 
   const y0 = 135
-  pdfInfoRow(doc, 'Correo:', datos.correo, 40, y0)
-  pdfInfoRow(doc, 'Programa:', datos.programa_educativo || '-', 300, y0)
-  pdfInfoRow(doc, 'Estudiantes asignados:', String(datos.asignaciones.length), 40, y0 + 16)
+  pdfInfoRow(doc, 'Correo:', datos.correo, 40, y0, 320)
+  pdfInfoRow(doc, 'Programa:', datos.programa_educativo || '-', 380, y0, 332)
+  pdfInfoRow(doc, 'Estudiantes asignados:', String(datos.asignaciones.length), 40, y0 + 16, 320)
+  doc.fontSize(8).font('Helvetica').fillColor('#6B7280')
+    .text(`Semanas: "${MARCA_PDF.completa}" = doble validación, "${MARCA_PDF.soloDocente}" = solo registró el docente, "${MARCA_PDF.sinRegistro}" = sin registro`, 380, y0 + 17, { width: 332 })
 
-  const tableY = y0 + 45
-  const pageW = doc.page.width
-  const colW = [100, 160, 55, ...Array(13).fill(28), 40]
-  const colX = [40]
-  colW.forEach((w, i) => { if (i > 0) colX.push(colX[i-1] + colW[i-1]) })
-
-  const hdrs = ['Matrícula', 'Nombre', 'Grupo', 'S1','S2','S3','S4','S5','S6','S7','S8','S9','S10','S11','S12','S13','Total']
-  doc.rect(40, tableY, pageW - 80, 20).fill('#1F5C2E')
-  hdrs.forEach((h, i) => {
-    doc.fontSize(7).font('Helvetica-Bold').fillColor('#FFFFFF')
-      .text(h, colX[i] + 2, tableY + 6, { width: colW[i] - 2, align: 'center' })
+  const finTabla = pdfTabla(doc, {
+    y: y0 + 40,
+    tamano: 7,
+    columnas: [
+      { titulo: 'Matrícula', ancho: 62 },
+      { titulo: 'Nombre', ancho: 140 },
+      { titulo: 'Grupo', ancho: 52, alinear: 'center' },
+      ...Array.from({ length: 13 }, (_, i) => ({ titulo: `S${i + 1}`, ancho: 26, alinear: 'center' })),
+      { titulo: 'Total', ancho: 36, alinear: 'center' },
+      { titulo: 'Estatus', ancho: 84, alinear: 'center' },
+    ],
+    filas: datos.asignaciones.map(asig => {
+      const resumen = calcularResumen(asig.asistencia)
+      const total = resumen.filter(s => s.completa).length
+      return {
+        celdas: [
+          asig.matricula,
+          `${asig.nombre} ${asig.apellido_p} ${asig.apellido_m || ''}`,
+          asig.grupo || '-',
+          ...resumen.map(s => s.completa
+            ? { texto: MARCA_PDF.completa, color: '#166534', negrita: true }
+            : s.docente === '✓'
+              ? { texto: MARCA_PDF.soloDocente, color: '#D97706', negrita: true }
+              : { texto: MARCA_PDF.sinRegistro, color: '#9CA3AF' }),
+          { texto: `${total}/13`, color: COLOR_TOTAL(total), negrita: true },
+          ESTATUS_ASIGNACION[asig.estatus] || asig.estatus,
+        ],
+      }
+    }),
   })
 
-  datos.asignaciones.forEach((asig, idx) => {
-    const ry = tableY + 20 + idx * 16
-    if (ry > doc.page.height - 60) { doc.addPage({ layout: 'landscape' }); }
-    const resumen = calcularResumen(asig.asistencia)
-    const total = resumen.filter(s => s.completa).length
-    const bg = idx % 2 === 0 ? '#F4F6F4' : '#FFFFFF'
-    doc.rect(40, ry, pageW - 80, 16).fill(bg)
-    doc.fontSize(7).font('Helvetica').fillColor('#374151')
-      .text(asig.matricula, colX[0] + 2, ry + 4, { width: colW[0] - 4 })
-      .text(`${asig.nombre} ${asig.apellido_p}`, colX[1] + 2, ry + 4, { width: colW[1] - 4 })
-      .text(asig.grupo || '-', colX[2] + 2, ry + 4, { width: colW[2] - 4, align: 'center' })
-    resumen.forEach((s, si) => {
-      const color = s.completa ? '#166534' : s.docente === '✓' ? '#D97706' : '#9CA3AF'
-      doc.fillColor(color)
-        .text(s.completa ? '✓' : s.docente === '✓' ? '·' : '-', colX[3+si] + 2, ry + 4, { width: colW[3+si] - 4, align: 'center' })
-    })
-    const colorTotal = total === 13 ? '#166534' : total >= 7 ? '#D97706' : '#DC2626'
-    doc.fillColor(colorTotal).font('Helvetica-Bold')
-      .text(`${total}/13`, colX[16] + 2, ry + 4, { width: colW[16] - 4, align: 'center' })
-  })
-
+  const completos = datos.asignaciones.filter(a => calcularResumen(a.asistencia).filter(s => s.completa).length === 13).length
+  pdfBarraTotal(doc, `Estudiantes con 13/13 semanas validadas: ${completos} de ${datos.asignaciones.length}`, finTabla)
   doc.end()
 }
 
@@ -491,61 +556,49 @@ const reportePeriodoPDF = async (req, res) => {
   res.setHeader('Content-Disposition', `attachment; filename="reporte_periodo_${id_periodo}.pdf"`)
   doc.pipe(res)
 
-  pdfHeader(doc, `Reporte General de Estadías`, datos.nombre)
+  pdfHeader(doc, 'Reporte General de Estadías', datos.nombre)
 
   const y0 = 135
-  pdfInfoRow(doc, 'Periodo:', datos.nombre, 40, y0)
-  pdfInfoRow(doc, 'Inicio:', formatFecha(datos.fecha_inicio), 300, y0)
-  pdfInfoRow(doc, 'Fin:', formatFecha(datos.fecha_fin), 450, y0)
-  pdfInfoRow(doc, 'Total estudiantes:', String(datos.asignaciones.length), 40, y0 + 16)
+  pdfInfoRow(doc, 'Periodo:', datos.nombre, 40, y0, 320)
+  pdfInfoRow(doc, 'Inicio:', formatFecha(datos.fecha_inicio), 380, y0, 160)
+  pdfInfoRow(doc, 'Fin:', formatFecha(datos.fecha_fin), 552, y0, 160)
+  pdfInfoRow(doc, 'Total de asignaciones:', String(datos.asignaciones.length), 40, y0 + 16, 320)
 
-  const tableY = y0 + 45
-  const pageW = doc.page.width
-  const hdrs2 = ['Matrícula', 'Nombre', 'Grupo', 'Carrera', 'Asesor', 'Validadas', 'Progreso', 'Estatus']
-  const colW2 = [75, 130, 55, 130, 120, 55, 55, 60]
-  const colX2 = [40]
-  colW2.forEach((w, i) => { if (i > 0) colX2.push(colX2[i-1] + colW2[i-1]) })
-
-  doc.rect(40, tableY, pageW - 80, 20).fill('#1F5C2E')
-  hdrs2.forEach((h, i) => {
-    doc.fontSize(8).font('Helvetica-Bold').fillColor('#FFFFFF')
-      .text(h, colX2[i] + 2, tableY + 6, { width: colW2[i] - 4, align: 'center' })
-  })
-
-  datos.asignaciones.forEach((asig, idx) => {
-    const ry = tableY + 20 + idx * 17
-    if (ry > doc.page.height - 60) { doc.addPage({ layout: 'landscape' }) }
-    const total = asig.asistencia.filter(a => a.confirmacion_docente && a.confirmacion_estudiante).length
-    const pct = Math.round((total / 13) * 100)
-    const bg = idx % 2 === 0 ? '#F4F6F4' : '#FFFFFF'
-
-    doc.rect(40, ry, pageW - 80, 17).fill(bg)
-    doc.fontSize(8).font('Helvetica').fillColor('#374151')
-      .text(asig.matricula, colX2[0]+2, ry+4, { width: colW2[0]-4 })
-      .text(`${asig.nombre} ${asig.apellido_p}`, colX2[1]+2, ry+4, { width: colW2[1]-4 })
-      .text(asig.grupo||'-', colX2[2]+2, ry+4, { width: colW2[2]-4, align: 'center' })
-      .text(asig.carrera||'-', colX2[3]+2, ry+4, { width: colW2[3]-4 })
-      .text(`${asig.doc_nombre} ${asig.doc_apellido_p}`, colX2[4]+2, ry+4, { width: colW2[4]-4 })
-
-    const colorTotal = total===13 ? '#166534' : total>=7 ? '#D97706' : '#DC2626'
-    doc.fillColor(colorTotal).font('Helvetica-Bold')
-      .text(String(total), colX2[5]+2, ry+4, { width: colW2[5]-4, align: 'center' })
-      .text(`${pct}%`, colX2[6]+2, ry+4, { width: colW2[6]-4, align: 'center' })
-
-    const estatusColor = asig.estatus==='activa' ? '#166534' : asig.estatus==='concluida' ? '#1E40AF' : '#991B1B'
-    doc.fillColor(estatusColor).font('Helvetica')
-      .text(asig.estatus, colX2[7]+2, ry+4, { width: colW2[7]-4, align: 'center' })
+  const finTabla = pdfTabla(doc, {
+    y: y0 + 40,
+    tamano: 8,
+    columnas: [
+      { titulo: 'Matrícula', ancho: 66 },
+      { titulo: 'Nombre', ancho: 150 },
+      { titulo: 'Grupo', ancho: 58, alinear: 'center' },
+      { titulo: 'Carrera', ancho: 150 },
+      { titulo: 'Asesor', ancho: 120 },
+      { titulo: 'Validadas', ancho: 52, alinear: 'center' },
+      { titulo: 'Progreso', ancho: 52, alinear: 'center' },
+      { titulo: 'Estatus', ancho: 64, alinear: 'center' },
+    ],
+    filas: datos.asignaciones.map(asig => {
+      const total = asig.asistencia.filter(a => a.confirmacion_docente && a.confirmacion_estudiante).length
+      const colorEstatus = asig.estatus === 'activa' ? '#166534' : asig.estatus === 'concluida' ? '#1E40AF' : '#991B1B'
+      return {
+        celdas: [
+          asig.matricula,
+          `${asig.nombre} ${asig.apellido_p} ${asig.apellido_m || ''}`,
+          asig.grupo || '-',
+          asig.carrera || '-',
+          `${asig.doc_nombre} ${asig.doc_apellido_p}`,
+          { texto: String(total), color: COLOR_TOTAL(total), negrita: true },
+          { texto: `${Math.round((total / 13) * 100)}%`, color: COLOR_TOTAL(total), negrita: true },
+          { texto: ESTATUS_ASIGNACION[asig.estatus] || asig.estatus, color: colorEstatus },
+        ],
+      }
+    }),
   })
 
   const totalValidadas = datos.asignaciones.filter(a =>
     a.asistencia.filter(s => s.confirmacion_docente && s.confirmacion_estudiante).length === 13
   ).length
-
-  const footerY = doc.page.height - 50
-  doc.rect(40, footerY, pageW - 80, 24).fill('#1F5C2E')
-  doc.fontSize(9).font('Helvetica-Bold').fillColor('#FFFFFF')
-    .text(`Estudiantes con 13/13 semanas validadas: ${totalValidadas} de ${datos.asignaciones.length}`, 44, footerY + 7)
-
+  pdfBarraTotal(doc, `Estudiantes con 13/13 semanas validadas: ${totalValidadas} de ${datos.asignaciones.length}`, finTabla)
   doc.end()
 }
 
