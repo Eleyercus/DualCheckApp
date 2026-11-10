@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import { useFiltro } from '../../hooks/useFiltro'
 import BarraFiltros, { SinResultadosFiltro } from '../../components/BarraFiltros'
+import TablaDatos from '../../components/TablaDatos'
 
 export default function Docentes() {
   const [docentes, setDocentes] = useState([])
@@ -187,47 +188,49 @@ export default function Docentes() {
         ) : docentesFiltrados.length === 0 ? (
           <SinResultadosFiltro onLimpiar={limpiarFiltros} />
         ) : (
-          <div className="tabla-wrapper">
-            <table className="tabla">
-              <thead>
-                <tr>
-                  {['Nombre completo', 'Programa', 'Correo', 'Alumnos asignados', 'Estatus', 'Acciones'].map(col => (
-                    <th key={col}>{col}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {docentesFiltrados.map(d => (
-                  <tr key={d.id}>
-                    <td style={{ fontWeight: '500' }}>{d.nombre} {d.apellido_p} {d.apellido_m}</td>
-                    <td>{d.programa_educativo || '—'}</td>
-                    <td style={{ color: 'var(--texto-muted)' }}>{d.correo}</td>
-                    <td style={{ textAlign: 'center' }}>
-                      <span style={{
-                        background: d.estudiantes_asignados > 0 ? '#dbeafe' : '#f3f4f6',
-                        color: d.estudiantes_asignados > 0 ? '#1e40af' : '#6b7280',
-                        padding: '2px 10px', borderRadius: '99px', fontSize: '12px', fontWeight: '500'
-                      }}>
-                        {d.estudiantes_asignados}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={d.estatus ? 'badge-activo' : 'badge-baja'}>
-                        {d.estatus ? 'Activo' : 'Baja'}
-                      </span>
-                    </td>
-                    <td>
-                      {d.estatus ? (
-                        <button className="btn-peligro" onClick={() => handleBaja(d.id)}>
-                          Dar de baja
-                        </button>
-                      ) : '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <TablaDatos
+            filas={docentesFiltrados}
+            claveFila={d => d.id}
+            ordenInicial={{ clave: 'nombre', dir: 'asc' }}
+            columnas={[
+              {
+                clave: 'nombre', titulo: 'Nombre completo', ordenable: true, estilo: { fontWeight: '500' },
+                valor: d => `${d.apellido_p} ${d.apellido_m || ''} ${d.nombre}`,
+                render: d => `${d.nombre} ${d.apellido_p} ${d.apellido_m || ''}`,
+              },
+              { clave: 'programa_educativo', titulo: 'Programa', ordenable: true, render: d => d.programa_educativo || '—' },
+              { clave: 'correo', titulo: 'Correo', ordenable: true, estilo: { color: 'var(--texto-muted)' } },
+              {
+                clave: 'estudiantes_asignados', titulo: 'Alumnos asignados', ordenable: true, estilo: { textAlign: 'center' },
+                valor: d => Number(d.estudiantes_asignados),
+                render: d => (
+                  <span style={{
+                    background: d.estudiantes_asignados > 0 ? '#dbeafe' : '#f3f4f6',
+                    color: d.estudiantes_asignados > 0 ? '#1e40af' : '#6b7280',
+                    padding: '2px 10px', borderRadius: '99px', fontSize: '12px', fontWeight: '500'
+                  }}>
+                    {d.estudiantes_asignados}
+                  </span>
+                ),
+              },
+              {
+                clave: 'estatus', titulo: 'Estatus', ordenable: true, valor: d => d.estatus ? 'Activo' : 'Baja',
+                render: d => (
+                  <span className={d.estatus ? 'badge-activo' : 'badge-baja'}>
+                    {d.estatus ? 'Activo' : 'Baja'}
+                  </span>
+                ),
+              },
+              {
+                clave: 'acciones', titulo: 'Acciones',
+                render: d => d.estatus ? (
+                  <button className="btn-peligro" onClick={() => handleBaja(d.id)}>
+                    Dar de baja
+                  </button>
+                ) : '—',
+              },
+            ]}
+          />
         )}
       </div>
     </div>

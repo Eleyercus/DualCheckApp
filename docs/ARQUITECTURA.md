@@ -31,14 +31,14 @@ El primer administrador se crea a mano con un hash bcrypt (ver `README.md`).
 Salvo indicación, requiere JWT y perfil administrador.
 
 - **auth**: `POST /auth/login` (público), `POST /auth/cambiar-password`, `GET /auth/requiere-cambio`
-- **estudiantes**: `GET /`, `GET /:id`, `POST /`, `POST /carga-masiva` (multer, campo `archivo`, Excel), `PATCH /:id/requisitos|empresa|estatus-especial|baja`
+- **estudiantes**: `GET /?periodo=activo|<id>|todos` (por defecto `activo`: con asignación en el periodo activo más pendientes de asignar), `GET /plantilla` (Excel para carga masiva), `GET /:id`, `POST /`, `POST /carga-masiva` (multer, campo `archivo`, Excel; detecta la fila de encabezados y acepta nombres alternativos de columna), `PATCH /:id/requisitos|empresa|estatus-especial|baja`
 - **docentes**: `GET /`, `POST /`, `PATCH /:id/baja` (no hay carga masiva: brecha de RF-07)
 - **asignaciones**: `GET /`, `GET /sin-asesor`, `GET /docentes-activos`, `POST /`, `PATCH /:id/cancelar|concluir`
 - **asistencia**
   - docente: `GET /mis-estudiantes`, `GET /asignacion/:id`, `PATCH /asignacion/:id/validar`, `POST /asignacion/:id/semana/:semana/docente`, `POST /asignacion/:id/semana/:semana/solicitar-correccion`
   - admin: `GET /solicitudes-pendientes`, `PATCH /solicitudes/:id_bitacora/aprobar|rechazar`
   - estudiante (con `restringirIPEstudiante`): `GET /mi-asistencia`, `POST /asignacion/:id/semana/:semana/estudiante`
-- **periodos**: `GET /`, `GET /activo` (cualquier perfil autenticado), `POST /`, `PATCH /:id/estatus`
+- **periodos**: `GET /`, `GET /activo` (cualquier perfil autenticado), `POST /`, `PATCH /:id/estatus`, `PATCH /:id/cerrar` (body `confirmacion` = nombre exacto; concluye sus asignaciones activas y lo desactiva, sin borrar datos)
 - **reportes**: `GET /opciones`; `/estudiante/:id/periodo/:id`, `/docente/:id/periodo/:id`, `/periodo/:id`, cada uno con `/excel` y `/pdf`
 - `GET /` (raíz, sin /api) es el health check; `GET /api/protegida` es una ruta de prueba solo admin.
 
@@ -58,6 +58,7 @@ Salvo indicación, requiere JWT y perfil administrador.
 
 - `AuthContext` guarda token/perfil/correo en `localStorage`; `api.js` adjunta el Bearer y, ante 401/403 fuera de `/auth/login`, limpia sesión y redirige a `/`.
 - Panel por perfil: admin (Dashboard, Estudiantes, Docentes, Asignaciones, Periodos, Reportes, Correcciones), docente (Dashboard), estudiante (Dashboard táctil).
+- Tablas del admin: `<TablaDatos />` (orden por columna y paginación de 10/25/50/100 filas) sobre el resultado de `useFiltro`. Listas largas de estudiantes y docentes en formularios: `<SelectBusqueda />` (react-select).
 - Búsqueda y filtros: `useFiltro(datos, { buscarEn, filtros })` + `<BarraFiltros />` + `<SinResultadosFiltro />`; clases CSS `.barra-herramientas`, `.buscador`, `.filtro-select`, `.btn-limpiar-filtros`, `.contador-resultados`, `.sin-resultados`, `.stat-card-clicable` en `client/src/index.css`.
 - Deuda conocida de lint: `cargar` usado antes de su declaración (regla react-hooks/immutability) en ~13 archivos; no afecta la ejecución.
 

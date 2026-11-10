@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
+import SelectBusqueda from '../../components/SelectBusqueda'
 
 const TIPOS = [
   { key: 'periodo', label: 'Reporte general del periodo', icon: '📊', desc: 'Todos los estudiantes del periodo con su progreso de asistencia' },
@@ -123,32 +124,31 @@ export default function Reportes() {
           {/* Docente — solo si tipo = docente */}
           {tipo === 'docente' && (
             <div className="form-campo">
-              <label className="form-label">Docente *</label>
-              <select className="form-input" value={form.id_docente}
-                onChange={e => setForm({ ...form, id_docente: e.target.value })}>
-                <option value="">Selecciona un docente</option>
-                {opciones.docentes.map(d => (
-                  <option key={d.id} value={d.id}>
-                    {d.nombre} {d.apellido_p} {d.apellido_m}
-                  </option>
-                ))}
-              </select>
+              <label className="form-label" htmlFor="rep-docente">Docente *</label>
+              <SelectBusqueda
+                inputId="rep-docente"
+                placeholder="Busca por nombre del docente..."
+                valor={form.id_docente}
+                onCambio={v => setForm({ ...form, id_docente: v })}
+                opciones={opciones.docentes.map(d => ({ value: d.id, label: `${d.nombre} ${d.apellido_p} ${d.apellido_m || ''}` }))}
+              />
             </div>
           )}
 
           {/* Estudiante — solo si tipo = estudiante */}
           {tipo === 'estudiante' && (
             <div className="form-campo">
-              <label className="form-label">Estudiante *</label>
-              <select className="form-input" value={form.id_estudiante}
-                onChange={e => setForm({ ...form, id_estudiante: e.target.value })}>
-                <option value="">Selecciona un estudiante</option>
-                {opciones.estudiantes.map(e => (
-                  <option key={e.id} value={e.id}>
-                    {e.matricula} — {e.nombre} {e.apellido_p} ({e.grupo || 'sin grupo'})
-                  </option>
-                ))}
-              </select>
+              <label className="form-label" htmlFor="rep-estudiante">Estudiante *</label>
+              <SelectBusqueda
+                inputId="rep-estudiante"
+                placeholder="Busca por nombre, matrícula o grupo..."
+                valor={form.id_estudiante}
+                onCambio={v => setForm({ ...form, id_estudiante: v })}
+                opciones={opciones.estudiantes.map(e => ({
+                  value: e.id,
+                  label: `${e.matricula} — ${e.nombre} ${e.apellido_p} ${e.apellido_m || ''} (${e.grupo || 'sin grupo'})`,
+                }))}
+              />
             </div>
           )}
         </div>

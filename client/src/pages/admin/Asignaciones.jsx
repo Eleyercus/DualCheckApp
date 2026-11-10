@@ -2,6 +2,15 @@ import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import { useFiltro } from '../../hooks/useFiltro'
 import BarraFiltros, { SinResultadosFiltro } from '../../components/BarraFiltros'
+import TablaDatos from '../../components/TablaDatos'
+import SelectBusqueda from '../../components/SelectBusqueda'
+
+// Fecha 'AAAA-MM-DD...' como fecha local (new Date('AAAA-MM-DD') la toma en UTC y en México resta un día)
+const fechaLocal = (texto) => {
+  const [a, m, d] = String(texto).substring(0, 10).split('-').map(Number)
+  return new Date(a, m - 1, d)
+}
+const formatoLargo = { day: '2-digit', month: 'long', year: 'numeric' }
 
 const BADGE = {
   activa: { label: 'Activa', bg: '#dcfce7', color: '#166534' },
@@ -19,6 +28,7 @@ export default function Asignaciones() {
   const [mostrarForm, setMostrarForm] = useState(false)
   const [form, setForm] = useState({ id_estudiante: '', id_docente: '' })
   const [guardando, setGuardando] = useState(false)
+  const [filtroInicialAplicado, setFiltroInicialAplicado] = useState(false)
 
   useEffect(() => { cargarTodo() }, [])
 
@@ -42,7 +52,9 @@ export default function Asignaciones() {
   const limpiar = () => { setMensaje(''); setError('') }
 
   const handleSubmit = async (e) => {
-    e.preventDefault(); limpiar(); setGuardando(true)
+    e.preventDefault(); limpiar()
+    if (!form.id_estudiante || !form.id_docente) return setError('Selecciona un estudiante y un docente')
+    setGuardando(true)
     try {
       await api.post('/asignaciones', form)
       setMensaje('Asignación creada correctamente')
@@ -72,7 +84,7 @@ export default function Asignaciones() {
     } catch { setError('Error al cancelar asignación') }
   }
 
-  const activas = asignaciones.filter(a => a.activa).length
+  const activas = asignaciones.filter(a => a.estatus === 'activa').length
   const docenteSeleccionado = docentes.find(d => String(d.id) === String(form.id_docente))
 
   // ── Búsqueda y filtros de la tabla ──────────────────────────────────────
@@ -80,7 +92,7 @@ export default function Asignaciones() {
     asignaciones.map(a => `${a.doc_nombre} ${a.doc_apellido_p}`).filter(Boolean)
   )).sort((a, b) => a.localeCompare(b, 'es'))
   const periodosEnTabla = Array.from(new Set(
-    asignaciones.map(a => a.periodo_nombre).filter(Boolean)
+    [...asignaciones.map(a => a.periodo_nombre), periodo?.nombre].filter(Boolean)
   )).sort((a, b) => a.localeCompare(b, 'es'))
 
   const {
@@ -94,6 +106,12 @@ export default function Asignaciones() {
       periodo: (a, v) => a.periodo_nombre === v,
     }
   })
+
+  // Al abrir la pantalla, la tabla muestra solo el periodo activo (se puede quitar el filtro)
+  if (!filtroInicialAplicado && !cargando) {
+    setFiltroInicialAplicado(true)
+    if (periodo) setFiltro('periodo', periodo.nombre)
+  }
 
   const definicionFiltros = [
     {
@@ -165,9 +183,9 @@ export default function Asignaciones() {
             </p>
           </div>
           <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', margin: 0 }}>
-            {new Date(periodo.fecha_inicio.substring(0,10)).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })}
+            {fechaLocal(periodo.fecha_inicio).toLocaleDateString('es-MX', formatoLargo)}
             {' — '}
-            {new Date(periodo.fecha_fin.substring(0,10)).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })}
+            {fechaLocal(periodo.fecha_fin).toLocaleDateString('es-MX', formatoLargo)}
           </p>
         </div>
       ) : (
@@ -225,29 +243,31 @@ export default function Asignaciones() {
           <form onSubmit={handleSubmit}>
             <div className="form-grid">
               <div className="form-campo">
-                <label className="form-label">Estudiante *</label>
-                <select className="form-input" value={form.id_estudiante}
-                  onChange={e => setForm({ ...form, id_estudiante: e.target.value })} required>
-                  <option value="">Selecciona un estudiante</option>
-                  {sinAsesor.map(e => (
-                    <option key={e.id} value={e.id}>
-                      {e.matricula} — {e.nombre} {e.apellido_p} {e.apellido_m} ({e.grupo || 'sin grupo'})
-                    </option>
-                  ))}
-                </select>
+                <label className="form-label" htmlFor="asig-estudiante">Estudiante *</label>
+                <SelectBusqueda
+                  inputId="asig-estudiante"
+                  placeholder="Busca por nombre, matrícula o grupo..."
+                  valor={form.id_estudiante}
+                  onCambio={v => setForm({ ...form, id_estudiante: v })}
+                  opciones={sinAsesor.map(e => ({
+                    value: e.id,
+                    label: `${e.matricula} — ${e.nombre} ${e.apellido_p} ${e.apellido_m || ''} (${e.grupo || 'sin grupo'})`,
+                  }))}
+                />
               </div>
 
               <div className="form-campo">
-                <label className="form-label">Docente asesor *</label>
-                <select className="form-input" value={form.id_docente}
-                  onChange={e => setForm({ ...form, id_docente: e.target.value })} required>
-                  <option value="">Selecciona un docente</option>
-                  {docentes.map(d => (
-                    <option key={d.id} value={d.id}>
-                      {d.nombre} {d.apellido_p} {d.apellido_m} — {d.estudiantes_asignados} alumno{d.estudiantes_asignados !== 1 ? 's' : ''}
-                    </option>
-                  ))}
-                </select>
+                <label className="form-label" htmlFor="asig-docente">Docente asesor *</label>
+                <SelectBusqueda
+                  inputId="asig-docente"
+                  placeholder="Busca por nombre del docente..."
+                  valor={form.id_docente}
+                  onCambio={v => setForm({ ...form, id_docente: v })}
+                  opciones={docentes.map(d => ({
+                    value: d.id,
+                    label: `${d.nombre} ${d.apellido_p} ${d.apellido_m || ''} — ${d.estudiantes_asignados} alumno${d.estudiantes_asignados !== 1 ? 's' : ''}`,
+                  }))}
+                />
               </div>
             </div>
 
@@ -306,56 +326,55 @@ export default function Asignaciones() {
         ) : asignacionesFiltradas.length === 0 ? (
           <SinResultadosFiltro onLimpiar={limpiarFiltros} />
         ) : (
-          <div className="tabla-wrapper">
-            <table className="tabla">
-              <thead>
-                <tr>
-                  {['Estudiante', 'Matrícula', 'Grupo', 'Docente asesor', 'Periodo', 'Fecha', 'Estatus', 'Acciones'].map(c => (
-                  <th key={c}>{c}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {asignacionesFiltradas.map(a => (
-                  <tr key={a.id}>
-                    <td style={{ fontWeight: '500' }}>
-                      {a.est_nombre} {a.est_apellido_p} {a.est_apellido_m}
-                    </td>
-                    <td>{a.matricula}</td>
-                    <td>{a.grupo || '—'}</td>
-                    <td>{a.doc_nombre} {a.doc_apellido_p}</td>
-<td style=          {{ fontSize: '11px', color: 'var(--texto-muted)' }}>{a.periodo_nombre}</td>
-                    <td style={{ color: 'var(--texto-muted)', fontSize: '12px' }}>
-                      {new Date(a.fecha_asignacion).toLocaleDateString('es-MX', {
-                        day: '2-digit', month: 'short', year: 'numeric'
-                      })}
-                    </td>
-                    <td>
-                      <span style={{
-                        fontSize: '11px', fontWeight: '500', padding: '2px 8px', borderRadius: '99px',
-                        background: a.estatus === 'activa' ? '#dcfce7' : a.estatus === 'concluida' ? '#dbeafe' : '#fee2e2',
-                        color: a.estatus === 'activa' ? '#166534' : a.estatus === 'concluida' ? '#1e40af' : '#991b1b'
-                        }}>
-                        {a.estatus === 'activa' ? 'Activa' : a.estatus === 'concluida' ? 'Concluida' : 'Cancelada'}
-                      </span>
-                    </td>
-                    <td>
-                      {a.estatus === 'activa' ? (
-                      <div style={{ display: 'flex', gap: '6px' }}>
-                        <button className="btn-secundario" style={{ fontSize: '11px', padding: '4px 10px' }} onClick={() => handleConcluir(a.id)}>
-                          Concluir
-                        </button>
-                        <button className="btn-peligro" onClick={() => handleCancelar(a.id)}>
-                          Cancelar
-                        </button>
-                      </div>
-                      ) : '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <TablaDatos
+            filas={asignacionesFiltradas}
+            claveFila={a => a.id}
+            columnas={[
+              {
+                clave: 'estudiante', titulo: 'Estudiante', ordenable: true, estilo: { fontWeight: '500' },
+                valor: a => `${a.est_apellido_p} ${a.est_apellido_m || ''} ${a.est_nombre}`,
+                render: a => `${a.est_nombre} ${a.est_apellido_p} ${a.est_apellido_m || ''}`,
+              },
+              { clave: 'matricula', titulo: 'Matrícula', ordenable: true },
+              { clave: 'grupo', titulo: 'Grupo', ordenable: true, render: a => a.grupo || '—' },
+              {
+                clave: 'docente', titulo: 'Docente asesor', ordenable: true,
+                valor: a => `${a.doc_nombre} ${a.doc_apellido_p}`,
+                render: a => `${a.doc_nombre} ${a.doc_apellido_p}`,
+              },
+              { clave: 'periodo_nombre', titulo: 'Periodo', ordenable: true, estilo: { fontSize: '11px', color: 'var(--texto-muted)' } },
+              {
+                clave: 'fecha_asignacion', titulo: 'Fecha', ordenable: true, estilo: { color: 'var(--texto-muted)', fontSize: '12px' },
+                valor: a => new Date(a.fecha_asignacion).getTime(),
+                render: a => new Date(a.fecha_asignacion).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }),
+              },
+              {
+                clave: 'estatus', titulo: 'Estatus', ordenable: true,
+                render: a => (
+                  <span style={{
+                    fontSize: '11px', fontWeight: '500', padding: '2px 8px', borderRadius: '99px',
+                    background: a.estatus === 'activa' ? '#dcfce7' : a.estatus === 'concluida' ? '#dbeafe' : '#fee2e2',
+                    color: a.estatus === 'activa' ? '#166534' : a.estatus === 'concluida' ? '#1e40af' : '#991b1b'
+                  }}>
+                    {a.estatus === 'activa' ? 'Activa' : a.estatus === 'concluida' ? 'Concluida' : 'Cancelada'}
+                  </span>
+                ),
+              },
+              {
+                clave: 'acciones', titulo: 'Acciones',
+                render: a => a.estatus === 'activa' ? (
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button className="btn-secundario" style={{ fontSize: '11px', padding: '4px 10px' }} onClick={() => handleConcluir(a.id)}>
+                      Concluir
+                    </button>
+                    <button className="btn-peligro" onClick={() => handleCancelar(a.id)}>
+                      Cancelar
+                    </button>
+                  </div>
+                ) : '—',
+              },
+            ]}
+          />
         )}
       </div>
 

@@ -24,7 +24,9 @@ const getAsignaciones = async (req, res) => {
   }
 }
 
-// Estudiantes sin asesor DENTRO del periodo activo
+// Estudiantes pendientes de asignar en el periodo activo: activos y sin ninguna
+// asignación válida (las canceladas no cuentan, por ejemplo tras una baja y una
+// reincorporación). Quien ya concluyó su estadía en otro periodo no vuelve a aparecer.
 const getEstudiantesSinAsesor = async (req, res) => {
   try {
     const [periodoActivo] = await db.query('SELECT id FROM periodos WHERE activo = 1 ORDER BY fecha_inicio DESC LIMIT 1')
@@ -39,9 +41,10 @@ const getEstudiantesSinAsesor = async (req, res) => {
       JOIN usuarios u ON e.id_usuario = u.id
       WHERE u.estatus = 1
         AND e.id NOT IN (
-          SELECT id_estudiante FROM asignaciones 
+          SELECT id_estudiante FROM asignaciones
           WHERE id_periodo = ? AND estatus = 'activa'
         )
+        AND NOT EXISTS (SELECT 1 FROM asignaciones x WHERE x.id_estudiante = e.id AND x.estatus <> 'cancelada')
       ORDER BY e.apellido_p, e.nombre
     `, [idPeriodo])
     res.json(rows)

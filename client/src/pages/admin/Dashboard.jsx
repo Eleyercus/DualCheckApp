@@ -12,6 +12,8 @@ export default function AdminDashboard() {
   const { usuario, logout } = useAuth()
   const navigate = useNavigate()
   const [seccion, setSeccion] = useState('estudiantes')
+  // Periodo que muestra Estudiantes; Periodos lo cambia con "Ver alumnos"
+  const [periodoEstudiantes, setPeriodoEstudiantes] = useState('activo')
 
   const handleLogout = () => { logout(); navigate('/') }
 
@@ -41,7 +43,7 @@ export default function AdminDashboard() {
 
         <nav style={{ flex: 1, padding: '8px 0' }}>
           {navItems.map(item => (
-            <button key={item.key} onClick={() => setSeccion(item.key)} style={{
+            <button key={item.key} onClick={() => { setSeccion(item.key); setPeriodoEstudiantes('activo') }} style={{
               display: 'flex', alignItems: 'center', gap: '10px',
               width: '100%', padding: '10px 1.25rem',
               background: seccion === item.key ? 'rgba(255,255,255,0.1)' : 'transparent',
@@ -106,8 +108,10 @@ export default function AdminDashboard() {
         </header>
 
         <main style={{ flex: 1, overflowY: 'auto', padding: '1.5rem' }}>
-          {seccion === 'periodos' && <Periodos />}
-          {seccion === 'estudiantes' && <Estudiantes />}
+          {seccion === 'periodos' && (
+            <Periodos onVerAlumnos={id => { setPeriodoEstudiantes(String(id)); setSeccion('estudiantes') }} />
+          )}
+          {seccion === 'estudiantes' && <Estudiantes key={periodoEstudiantes} periodoInicial={periodoEstudiantes} />}
           {seccion === 'docentes' && <Docentes />}
           {seccion === 'asignaciones' && <Asignaciones />}
           {seccion === 'asistencia' && <Correcciones />}

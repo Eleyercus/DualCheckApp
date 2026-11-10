@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import { useFiltro } from '../../hooks/useFiltro'
 import BarraFiltros, { SinResultadosFiltro } from '../../components/BarraFiltros'
+import TablaDatos from '../../components/TablaDatos'
 
 const BADGE_SOLICITUD = {
   PENDIENTE: { label: 'Pendiente', bg: '#fef3c7', color: '#92400e' },
@@ -165,65 +166,67 @@ export default function Correcciones() {
         ) : solicitudesFiltradas.length === 0 ? (
           <SinResultadosFiltro onLimpiar={limpiarFiltros} />
         ) : (
-          <div className="tabla-wrapper">
-            <table className="tabla">
-              <thead>
-                <tr>
-                  {['Solicitada', 'Docente', 'Estudiante', 'Semana', 'Motivo', 'Estatus', 'Acciones'].map(c => (
-                    <th key={c}>{c}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {solicitudesFiltradas.map(s => {
+          <TablaDatos
+            filas={solicitudesFiltradas}
+            claveFila={s => s.id}
+            columnas={[
+              {
+                clave: 'fecha', titulo: 'Solicitada', ordenable: true,
+                estilo: { color: 'var(--texto-muted)', fontSize: '12px', whiteSpace: 'nowrap' },
+                valor: s => new Date(s.fecha_solicitud || s.fecha_hora).getTime(),
+                render: s => formatearFecha(s.fecha_solicitud || s.fecha_hora),
+              },
+              { clave: 'docente', titulo: 'Docente', ordenable: true, estilo: { fontWeight: '500' } },
+              { clave: 'estudiante', titulo: 'Estudiante', ordenable: true },
+              { clave: 'semana', titulo: 'Semana', ordenable: true, estilo: { textAlign: 'center' }, valor: s => Number(s.semana) },
+              {
+                clave: 'motivo', titulo: 'Motivo',
+                estilo: { maxWidth: '260px', whiteSpace: 'normal', fontSize: '12px', color: 'var(--texto-muted)' },
+                render: s => (
+                  <>
+                    {s.motivo}
+                    {s.estatus === 'RECHAZADA' && s.motivo_rechazo && (
+                      <div style={{ marginTop: '4px', fontSize: '11px', color: '#991b1b' }}>
+                        <strong>Motivo del rechazo:</strong> {s.motivo_rechazo}
+                      </div>
+                    )}
+                  </>
+                ),
+              },
+              {
+                clave: 'estatus', titulo: 'Estatus', ordenable: true,
+                render: s => {
                   const badge = BADGE_SOLICITUD[s.estatus] || BADGE_SOLICITUD.PENDIENTE
                   return (
-                    <tr key={s.id}>
-                      <td style={{ color: 'var(--texto-muted)', fontSize: '12px', whiteSpace: 'nowrap' }}>
-                        {formatearFecha(s.fecha_solicitud || s.fecha_hora)}
-                      </td>
-                      <td style={{ fontWeight: '500' }}>{s.docente}</td>
-                      <td>{s.estudiante}</td>
-                      <td style={{ textAlign: 'center' }}>{s.semana}</td>
-                      <td style={{ maxWidth: '260px', whiteSpace: 'normal', fontSize: '12px', color: 'var(--texto-muted)' }}>
-                        {s.motivo}
-                        {s.estatus === 'RECHAZADA' && s.motivo_rechazo && (
-                          <div style={{ marginTop: '4px', fontSize: '11px', color: '#991b1b' }}>
-                            <strong>Motivo del rechazo:</strong> {s.motivo_rechazo}
-                          </div>
-                        )}
-                      </td>
-                      <td>
-                        <span style={{
-                          fontSize: '11px', fontWeight: '500', padding: '2px 8px', borderRadius: '99px',
-                          background: badge.bg, color: badge.color
-                        }}>
-                          {badge.label}
-                        </span>
-                      </td>
-                      <td>
-                        {s.estatus === 'PENDIENTE' ? (
-                          <div style={{ display: 'flex', gap: '6px' }}>
-                            <button className="btn-secundario" style={{ fontSize: '11px', padding: '4px 10px' }}
-                              onClick={() => aprobar(s.id)} disabled={procesando === s.id}>
-                              {procesando === s.id ? 'Procesando...' : 'Aprobar'}
-                            </button>
-                            <button className="btn-peligro" onClick={() => abrirRechazo(s.id)} disabled={procesando === s.id}>
-                              Rechazar
-                            </button>
-                          </div>
-                        ) : (
-                          <span style={{ fontSize: '11px', color: 'var(--texto-muted)' }}>
-                            {s.estatus === 'APROBADA' ? s.aprobada_por : s.rechazada_por}
-                          </span>
-                        )}
-                      </td>
-                    </tr>
+                    <span style={{
+                      fontSize: '11px', fontWeight: '500', padding: '2px 8px', borderRadius: '99px',
+                      background: badge.bg, color: badge.color
+                    }}>
+                      {badge.label}
+                    </span>
                   )
-                })}
-              </tbody>
-            </table>
-          </div>
+                },
+              },
+              {
+                clave: 'acciones', titulo: 'Acciones',
+                render: s => s.estatus === 'PENDIENTE' ? (
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button className="btn-secundario" style={{ fontSize: '11px', padding: '4px 10px' }}
+                      onClick={() => aprobar(s.id)} disabled={procesando === s.id}>
+                      {procesando === s.id ? 'Procesando...' : 'Aprobar'}
+                    </button>
+                    <button className="btn-peligro" onClick={() => abrirRechazo(s.id)} disabled={procesando === s.id}>
+                      Rechazar
+                    </button>
+                  </div>
+                ) : (
+                  <span style={{ fontSize: '11px', color: 'var(--texto-muted)' }}>
+                    {s.estatus === 'APROBADA' ? s.aprobada_por : s.rechazada_por}
+                  </span>
+                ),
+              },
+            ]}
+          />
         )}
       </div>
 

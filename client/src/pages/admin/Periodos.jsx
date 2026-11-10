@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
 
-export default function Periodos() {
+export default function Periodos({ onVerAlumnos }) {
   const [periodos, setPeriodos] = useState([])
   const [cargando, setCargando] = useState(true)
   const [mensaje, setMensaje] = useState('')
@@ -9,6 +9,9 @@ export default function Periodos() {
   const [mostrarForm, setMostrarForm] = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [form, setForm] = useState({ nombre: '', fecha_inicio: '', fecha_fin: '' })
+  const [periodoCierre, setPeriodoCierre] = useState(null)
+  const [confirmacionCierre, setConfirmacionCierre] = useState('')
+  const [cerrando, setCerrando] = useState(false)
 
   useEffect(() => { cargar() }, [])
 
@@ -53,6 +56,21 @@ export default function Periodos() {
       setMensaje('Periodo desactivado')
       cargar()
     } catch { setError('Error desactivando el periodo') }
+  }
+
+  const abrirCierre = (p) => { limpiar(); setConfirmacionCierre(''); setPeriodoCierre(p) }
+
+  const cerrarPeriodo = async () => {
+    setCerrando(true)
+    try {
+      const res = await api.patch(`/periodos/${periodoCierre.id}/cerrar`, { confirmacion: confirmacionCierre })
+      setMensaje(res.data.mensaje)
+      setPeriodoCierre(null)
+      cargar()
+    } catch (err) {
+      setError(err.response?.data?.error || 'Error al cerrar el periodo')
+      setPeriodoCierre(null)
+    } finally { setCerrando(false) }
   }
 
   const calcularSemanas = (inicio, fin) => {
@@ -207,15 +225,27 @@ export default function Periodos() {
                       </span>
                     </td>
                     <td>
-                      {p.activo ? (
-                        <button className="btn-secundario" style={{ fontSize: '11px', padding: '4px 10px' }} onClick={() => desactivarPeriodo(p.id)}>
-                          Desactivar
-                        </button>
-                      ) : (
-                        <button className="btn-primario" style={{ fontSize: '11px', padding: '4px 10px' }} onClick={() => activarPeriodo(p.id)}>
-                          Activar
-                        </button>
-                      )}
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        {p.activo ? (
+                          <button className="btn-secundario" style={{ fontSize: '11px', padding: '4px 10px' }} onClick={() => desactivarPeriodo(p.id)}>
+                            Desactivar
+                          </button>
+                        ) : (
+                          <button className="btn-primario" style={{ fontSize: '11px', padding: '4px 10px' }} onClick={() => activarPeriodo(p.id)}>
+                            Activar
+                          </button>
+                        )}
+                        {onVerAlumnos && p.total_asignaciones > 0 && (
+                          <button className="btn-secundario" style={{ fontSize: '11px', padding: '4px 10px' }} onClick={() => onVerAlumnos(p.id)}>
+                            Ver alumnos
+                          </button>
+                        )}
+                        {p.asignaciones_activas > 0 && (
+                          <button className="btn-peligro" onClick={() => abrirCierre(p)}>
+                            Cerrar periodo
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -224,6 +254,53 @@ export default function Periodos() {
           </div>
         )}
       </div>
+
+      {/* Confirmación de cierre de periodo: hay que escribir el nombre exacto */}
+      {periodoCierre && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(0,0,0,0.5)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem'
+        }}>
+          <div role="dialog" aria-modal="true" aria-labelledby="titulo-cierre" style={{
+            background: '#fff', borderRadius: '12px', width: '100%', maxWidth: '480px',
+            overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+          }}>
+            <div style={{ background: '#991b1b', padding: '1rem 1.25rem' }}>
+              <h3 id="titulo-cierre" style={{ color: '#fff', fontSize: '15px', fontWeight: '700', margin: 0 }}>
+                Cerrar el periodo "{periodoCierre.nombre}"
+              </h3>
+            </div>
+            <div style={{ padding: '1.25rem', fontSize: '13px', color: 'var(--texto)' }}>
+              <p style={{ marginBottom: '10px' }}>Al cerrar el periodo:</p>
+              <ul style={{ paddingLeft: '18px', marginBottom: '12px', lineHeight: 1.7 }}>
+                <li>
+                  Se {periodoCierre.asignaciones_activas === 1 ? 'marcará como' : 'marcarán como'}{' '}
+                  <strong>
+                    {periodoCierre.asignaciones_activas === 1 ? 'concluida 1 asignación activa' : `concluidas ${periodoCierre.asignaciones_activas} asignaciones activas`}
+                  </strong>.
+                </li>
+                <li>El periodo quedará inactivo y sus estudiantes dejarán de aparecer en la vista del periodo activo.</li>
+                <li><strong>No se borra ningún dato:</strong> el historial, la asistencia y los reportes siguen disponibles desde "Ver alumnos".</li>
+                <li>Las asignaciones concluidas no se pueden volver a activar desde el sistema.</li>
+              </ul>
+              <label htmlFor="confirmacion-cierre" className="form-label">
+                Para confirmar, escribe el nombre del periodo: <strong>{periodoCierre.nombre}</strong>
+              </label>
+              <input id="confirmacion-cierre" className="form-input" value={confirmacionCierre} autoComplete="off"
+                onChange={e => setConfirmacionCierre(e.target.value)} style={{ marginTop: '6px' }} />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '1rem' }}>
+                <button type="button" className="btn-secundario" onClick={() => setPeriodoCierre(null)} disabled={cerrando}>
+                  Cancelar
+                </button>
+                <button type="button" className="btn-peligro" onClick={cerrarPeriodo}
+                  disabled={cerrando || confirmacionCierre.trim() !== periodoCierre.nombre}>
+                  {cerrando ? 'Cerrando...' : 'Cerrar periodo'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
