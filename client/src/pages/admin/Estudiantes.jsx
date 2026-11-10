@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import { useFiltro } from '../../hooks/useFiltro'
 import BarraFiltros, { SinResultadosFiltro } from '../../components/BarraFiltros'
+import TablaDatos from '../../components/TablaDatos'
+
+const ESTATUS_ASIGNACION = { activa: 'Activa', concluida: 'Concluida', cancelada: 'Cancelada' }
 
 const TABS = ['datos', 'requisitos', 'empresa']
 const TAB_LABELS = { datos: 'Datos personales', requisitos: 'Requisitos', empresa: 'Datos de estadía' }
@@ -31,7 +34,8 @@ const FORM_INICIAL = {
 }
 
 // ─── Componente Detalle (separado para poder usar hooks) ────────────────────
-function DetalleEstudiante({ estudiante: e, onVolver, onActualizarRequisitos, onBaja, mensaje, error }) {
+function DetalleEstudiante({ estudiante: e, onVolver, onActualizarRequisitos, onBaja, onCambiarEstatus, mensaje, error }) {
+  const [estatusLocal, setEstatusLocal] = useState(e.estatus_especial || 'activo')
   const [reqLocal, setReqLocal] = useState({
     req_datos_estadia: !!e.req_datos_estadia,
     req_carta_no_adeudo: !!e.req_carta_no_adeudo,
@@ -154,25 +158,43 @@ function DetalleEstudiante({ estudiante: e, onVolver, onActualizarRequisitos, on
           )}
         </div>
 
-        {/* Zona de riesgo */}
-        {e.estatus ? (
-          <div className="card" style={{ gridColumn: '1 / -1', borderTop: '3px solid #dc2626' }}>
-            <h3 style={{ fontSize: '13px', fontWeight: '600', color: '#991b1b', marginBottom: '10px' }}>
-              Zona de riesgo
-            </h3>
-            <button className="btn-peligro" onClick={() => onBaja(e.id)}>
-              Dar de baja al estudiante
+        {/* Estatus: las bajas quitan el acceso y cancelan la asignación; reincorporar lo restaura */}
+        <div className="card" style={{ gridColumn: '1 / -1', borderTop: '3px solid var(--dorado)' }}>
+          <h3 style={{ fontSize: '13px', fontWeight: '600', color: 'var(--verde-oscuro)', marginBottom: '10px' }}>
+            Estatus del estudiante
+          </h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <select className="filtro-select" value={estatusLocal} onChange={ev => setEstatusLocal(ev.target.value)}
+              aria-label="Estatus del estudiante">
+              {Object.entries(BADGE_ESTATUS).map(([valor, { label }]) => (
+                <option key={valor} value={valor}>{label}</option>
+              ))}
+            </select>
+            <button className="btn-secundario" style={{ fontSize: '12px' }}
+              disabled={estatusLocal === (e.estatus_especial || 'activo')}
+              onClick={() => onCambiarEstatus(e.id, estatusLocal)}>
+              Guardar estatus
             </button>
+            {e.estatus ? (
+              <button className="btn-peligro" onClick={() => onBaja(e.id)}>
+                Dar de baja al estudiante
+              </button>
+            ) : null}
           </div>
-        ) : null}
+          <p style={{ fontSize: '11px', color: 'var(--texto-muted)', marginTop: '8px' }}>
+            Baja y Baja por reprobación quitan el acceso y cancelan su asignación activa. Activo y Reincorporado restauran el acceso; el reincorporado queda pendiente de asignar asesor.
+          </p>
+        </div>
       </div>
     </div>
   )
 }
 
 // ─── Componente principal ───────────────────────────────────────────────────
-export default function Estudiantes() {
+export default function Estudiantes({ periodoInicial = 'activo' }) {
   const [estudiantes, setEstudiantes] = useState([])
+  const [periodos, setPeriodos] = useState([])
+  const [periodoVista, setPeriodoVista] = useState(String(periodoInicial))
   const [cargando, setCargando] = useState(true)
   const [mensaje, setMensaje] = useState('')
   const [error, setError] = useState('')
@@ -183,20 +205,50 @@ export default function Estudiantes() {
   const [cargandoArchivo, setCargandoArchivo] = useState(false)
   const [form, setForm] = useState({ ...FORM_INICIAL })
 
-  useEffect(() => { cargar() }, [])
+  useEffect(() => {
+    api.get('/periodos').then(res => setPeriodos(res.data)).catch(() => {})
+  }, [])
+
+  useEffect(() => { cargar() }, [periodoVista])
 
   const cargar = async () => {
     try {
       setCargando(true)
-      const res = await api.get('/estudiantes')
+      const res = await api.get('/estudiantes', { params: { periodo: periodoVista } })
       setEstudiantes(res.data)
     } catch { setError('Error cargando estudiantes') }
     finally { setCargando(false) }
   }
 
+  const periodoActivo = periodos.find(p => p.activo)
+  const periodoConsultado = periodos.find(p => String(p.id) === periodoVista)
+  const esPeriodoAnterior = !!periodoConsultado && !periodoConsultado.activo
+
+  const handleDescargarPlantilla = async () => {
+    limpiar()
+    try {
+      const res = await api.get('/estudiantes/plantilla', { responseType: 'blob' })
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(res.data)
+      link.download = 'plantilla_carga_estudiantes.xlsx'
+      link.click()
+      URL.revokeObjectURL(link.href)
+    } catch { setError('Error descargando la plantilla') }
+  }
+
   const limpiar = () => { setMensaje(''); setError('') }
 
   const resetForm = () => { setForm({ ...FORM_INICIAL }); setTabForm('datos') }
+
+  // Paso 1 del alta: obligatorios y formato del correo antes de avanzar
+  const validarDatosPersonales = () => {
+    const faltan = [['matricula', 'Matrícula'], ['correo_personal', 'Correo personal'], ['nombre', 'Nombre(s)'], ['apellido_p', 'Apellido paterno']]
+      .filter(([k]) => !String(form[k] || '').trim()).map(([, label]) => label)
+    if (faltan.length > 0) { setError(`Completa los campos obligatorios: ${faltan.join(', ')}`); return false }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.correo_personal.trim())) { setError('El correo personal no tiene un formato válido'); return false }
+    setError('')
+    return true
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault(); limpiar()
@@ -206,7 +258,10 @@ export default function Estudiantes() {
       resetForm()
       setVista('lista')
       cargar()
-    } catch (err) { setError(err.response?.data?.error || 'Error al registrar') }
+    } catch (err) {
+      setError(err.response?.data?.error || 'Error al registrar')
+      document.getElementById('encabezado-nuevo-estudiante')?.scrollIntoView({ behavior: 'smooth' })
+    }
   }
 
   const handleCargaMasiva = async () => {
@@ -221,7 +276,7 @@ export default function Estudiantes() {
       if (res.data.errores?.length > 0)
         setError(`Errores: ${res.data.errores.map(e => `Fila ${e.fila}: ${e.mensaje}`).join(' | ')}`)
       setArchivo(null); cargar()
-    } catch { setError('Error procesando el archivo') }
+    } catch (err) { setError(err.response?.data?.error || 'Error procesando el archivo') }
     finally { setCargandoArchivo(false) }
   }
 
@@ -246,6 +301,18 @@ export default function Estudiantes() {
     } catch { setError('Error al dar de baja') }
   }
 
+  const handleCambiarEstatus = async (id, estatus) => {
+    if ((estatus === 'baja' || estatus === 'baja_reprobacion') &&
+      !confirm('El estudiante perderá el acceso y se cancelará su asignación activa. ¿Continuar?')) return
+    limpiar()
+    try {
+      const res = await api.patch(`/estudiantes/${id}/estatus-especial`, { estatus_especial: estatus })
+      await abrirDetalle(id)
+      setMensaje(res.data.mensaje)
+      cargar()
+    } catch (err) { setError(err.response?.data?.error || 'Error al actualizar el estatus') }
+  }
+
   const abrirDetalle = async (id) => {
     try {
       const res = await api.get(`/estudiantes/${id}`)
@@ -256,7 +323,7 @@ export default function Estudiantes() {
   }
 
   const cumpleRequisitos = (e) => e.req_datos_estadia && e.req_carta_no_adeudo && e.req_carta_servicios
-  const activos = estudiantes.filter(e => e.estatus && e.estatus_especial === 'activo').length
+  const activos = estudiantes.filter(e => e.estatus && ['activo', 'reincorporado'].includes(e.estatus_especial)).length
   const sinRequisitos = estudiantes.filter(e => e.estatus && !cumpleRequisitos(e)).length
 
   // ── Búsqueda y filtros de la tabla ──────────────────────────────────────
@@ -271,7 +338,7 @@ export default function Estudiantes() {
     query, setQuery, valoresFiltro, setFiltro, limpiar: limpiarFiltros,
     resultado: estudiantesFiltrados, hayFiltrosActivos, total, totalFiltrado
   } = useFiltro(estudiantes, {
-    buscarEn: e => `${e.matricula} ${e.nombre} ${e.apellido_p} ${e.apellido_m} ${e.correo_personal || e.correo || ''} ${e.carrera || e.programa || ''} ${e.grupo || ''}`,
+    buscarEn: e => `${e.matricula} ${e.nombre} ${e.apellido_p} ${e.apellido_m} ${e.correo_personal || e.correo || ''} ${e.carrera || e.programa || ''} ${e.grupo || ''} ${e.asesor || ''}`,
     filtros: {
       carrera: (e, v) => (e.carrera || e.programa) === v,
       grupo: (e, v) => e.grupo === v,
@@ -309,6 +376,7 @@ export default function Estudiantes() {
         onVolver={() => { setVista('lista'); setEstudianteDetalle(null); limpiar() }}
         onActualizarRequisitos={handleActualizarRequisitos}
         onBaja={handleBaja}
+        onCambiarEstatus={handleCambiarEstatus}
       />
     )
   }
@@ -321,7 +389,7 @@ export default function Estudiantes() {
           style={{ background: 'none', border: 'none', color: 'var(--verde)', cursor: 'pointer', fontSize: '13px' }}>
           ← Volver
         </button>
-        <h2 style={{ fontSize: '1.1rem', fontWeight: '700', color: 'var(--verde-oscuro)' }}>
+        <h2 id="encabezado-nuevo-estudiante" style={{ fontSize: '1.1rem', fontWeight: '700', color: 'var(--verde-oscuro)' }}>
           Registrar nuevo estudiante
         </h2>
       </div>
@@ -385,7 +453,7 @@ export default function Estudiantes() {
               </div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
-              <button type="button" className="btn-primario" onClick={() => setTabForm('requisitos')}>
+              <button type="button" className="btn-primario" onClick={() => validarDatosPersonales() && setTabForm('requisitos')}>
                 Siguiente →
               </button>
             </div>
@@ -497,15 +565,44 @@ export default function Estudiantes() {
             Registro y administración de alumnos en estadía
           </p>
         </div>
-        <button className="btn-primario" onClick={() => { setVista('nuevo'); limpiar() }}>
-          + Nuevo estudiante
-        </button>
+        {!esPeriodoAnterior && (
+          <button className="btn-primario" onClick={() => { setVista('nuevo'); limpiar() }}>
+            + Nuevo estudiante
+          </button>
+        )}
+      </div>
+
+      {/* Periodo consultado: por defecto solo los estudiantes del periodo activo */}
+      <div className="card" style={{
+        display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', padding: '10px 16px',
+        borderLeft: `4px solid ${esPeriodoAnterior ? 'var(--dorado)' : 'var(--verde)'}`, borderRadius: '0 8px 8px 0'
+      }}>
+        <label htmlFor="periodo-vista" style={{ fontSize: '12px', fontWeight: '600', color: 'var(--verde-oscuro)' }}>
+          Mostrando:
+        </label>
+        <select id="periodo-vista" className="filtro-select" value={periodoVista}
+          onChange={e => { setPeriodoVista(e.target.value); limpiar() }}>
+          <option value="activo">
+            {periodoActivo ? `Periodo activo — ${periodoActivo.nombre}` : 'Periodo activo (no hay ninguno)'}
+          </option>
+          {periodos.filter(p => !p.activo).map(p => (
+            <option key={p.id} value={p.id}>Periodo anterior — {p.nombre}</option>
+          ))}
+          <option value="todos">Todos los registros</option>
+        </select>
+        <span style={{ fontSize: '12px', color: 'var(--texto-muted)' }}>
+          {periodoVista === 'activo'
+            ? 'Estudiantes con asignación en el periodo activo y pendientes de asignar.'
+            : periodoVista === 'todos'
+              ? 'Todos los estudiantes registrados en el sistema, de cualquier periodo.'
+              : 'Consulta histórica: estudiantes que tuvieron asignación en este periodo.'}
+        </span>
       </div>
 
       {/* Estadísticas — también funcionan como accesos rápidos de filtro */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '1.25rem' }}>
         {[
-          { label: 'Total registrados', valor: estudiantes.length, color: 'var(--verde)', onClick: limpiarFiltros, activa: !hayFiltrosActivos },
+          { label: 'Total en la vista', valor: estudiantes.length, color: 'var(--verde)', onClick: limpiarFiltros, activa: !hayFiltrosActivos },
           { label: 'Activos', valor: activos, color: 'var(--naranja)', onClick: () => setFiltro('estatus', 'activo'), activa: valoresFiltro.estatus === 'activo' },
           { label: 'Sin requisitos completos', valor: sinRequisitos, color: sinRequisitos > 0 ? '#dc2626' : 'var(--texto-muted)', onClick: () => setFiltro('requisitos', 'incompletos'), activa: valoresFiltro.requisitos === 'incompletos' },
           { label: 'Con baja', valor: estudiantes.filter(e => e.estatus_especial?.includes('baja')).length, color: 'var(--dorado)', onClick: () => setFiltro('estatus', 'baja'), activa: valoresFiltro.estatus === 'baja' },
@@ -525,22 +622,31 @@ export default function Estudiantes() {
       {error && <div className="alerta-error">{error}</div>}
 
       {/* Carga masiva */}
-      <div className="card">
-        <h3 style={{ fontSize: '13px', fontWeight: '600', color: 'var(--verde-oscuro)', marginBottom: '6px' }}>
-          Carga masiva desde Excel
-        </h3>
-        <p style={{ fontSize: '11px', color: 'var(--texto-muted)', marginBottom: '10px' }}>
-          Columnas: <strong>Matrícula, Nombre, Apellido P, Apellido M, Correo Personal, Grupo, GEN, Abrev. carrera, Carrera, Tel. Celular, Datos Estadías, Carta N/A o Convenio, Carta Servicios Escolares</strong>
-        </p>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          <input type="file" accept=".xlsx,.csv"
-            onChange={e => setArchivo(e.target.files[0])}
-            style={{ fontSize: '12px', color: 'var(--texto-muted)' }} />
-          <button className="btn-secundario" onClick={handleCargaMasiva} disabled={cargandoArchivo}>
-            {cargandoArchivo ? 'Procesando...' : 'Cargar archivo'}
-          </button>
+      {!esPeriodoAnterior && (
+        <div className="card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
+            <div>
+              <h3 style={{ fontSize: '13px', fontWeight: '600', color: 'var(--verde-oscuro)', marginBottom: '6px' }}>
+                Carga masiva desde Excel
+              </h3>
+              <p style={{ fontSize: '11px', color: 'var(--texto-muted)', marginBottom: '10px' }}>
+                Obligatorias: <strong>Matrícula, Apellido Paterno, Nombre(s) y Correo Personal</strong>. Requisitos: escribe "Sí" o "X" si ya se entregó.
+              </p>
+            </div>
+            <button type="button" className="btn-secundario" style={{ fontSize: '12px' }} onClick={handleDescargarPlantilla}>
+              <i className="ti ti-download" aria-hidden="true" /> Descargar plantilla
+            </button>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <input type="file" accept=".xlsx,.csv"
+              onChange={e => setArchivo(e.target.files[0])}
+              style={{ fontSize: '12px', color: 'var(--texto-muted)' }} />
+            <button className="btn-secundario" onClick={handleCargaMasiva} disabled={cargandoArchivo}>
+              {cargandoArchivo ? 'Procesando...' : 'Cargar archivo'}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Búsqueda y filtros */}
       {estudiantes.length > 0 && (
@@ -560,63 +666,81 @@ export default function Estudiantes() {
           <p style={{ padding: '2rem', textAlign: 'center', color: 'var(--texto-muted)' }}>Cargando...</p>
         ) : estudiantes.length === 0 ? (
           <p style={{ padding: '2rem', textAlign: 'center', color: 'var(--texto-muted)' }}>
-            No hay estudiantes registrados aún.
+            {periodoVista === 'todos'
+              ? 'No hay estudiantes registrados aún.'
+              : 'No hay estudiantes en este periodo. Usa "Todos los registros" para ver a los de otros periodos.'}
           </p>
         ) : estudiantesFiltrados.length === 0 ? (
           <SinResultadosFiltro onLimpiar={limpiarFiltros} />
         ) : (
-          <div className="tabla-wrapper">
-            <table className="tabla">
-              <thead>
-                <tr>
-                  {['Matrícula', 'Nombre', 'Carrera', 'Grupo', 'Requisitos', 'Estatus', 'Acciones'].map(c => (
-                    <th key={c}>{c}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {estudiantesFiltrados.map(e => {
+          <TablaDatos
+            filas={estudiantesFiltrados}
+            claveFila={e => e.id}
+            ordenInicial={{ clave: 'nombre', dir: 'asc' }}
+            columnas={[
+              { clave: 'matricula', titulo: 'Matrícula', ordenable: true, estilo: { fontWeight: '500' } },
+              {
+                clave: 'nombre', titulo: 'Nombre', ordenable: true,
+                valor: e => `${e.apellido_p} ${e.apellido_m || ''} ${e.nombre}`,
+                render: e => `${e.apellido_p} ${e.apellido_m || ''}, ${e.nombre}`,
+              },
+              { clave: 'carrera', titulo: 'Carrera', ordenable: true, valor: e => e.carrera || e.programa || '', render: e => e.carrera || e.programa || '—' },
+              { clave: 'grupo', titulo: 'Grupo', ordenable: true, render: e => e.grupo || '—' },
+              {
+                clave: 'asesor', titulo: 'Asesor', ordenable: true, valor: e => e.asesor || '',
+                render: e => e.asesor ? (
+                  <span>
+                    {e.asesor}
+                    {e.asignacion_estatus !== 'activa' && (
+                      <span style={{ fontSize: '11px', color: 'var(--texto-muted)' }}> ({ESTATUS_ASIGNACION[e.asignacion_estatus]?.toLowerCase()})</span>
+                    )}
+                  </span>
+                ) : <span style={{ color: 'var(--texto-muted)' }}>Sin asesor</span>,
+              },
+              {
+                clave: 'requisitos', titulo: 'Requisitos', ordenable: true,
+                valor: e => [e.req_datos_estadia, e.req_carta_no_adeudo, e.req_carta_servicios].filter(Boolean).length,
+                render: e => {
                   const reqs = [e.req_datos_estadia, e.req_carta_no_adeudo, e.req_carta_servicios]
                   const completados = reqs.filter(Boolean).length
                   return (
-                    <tr key={e.id}>
-                      <td style={{ fontWeight: '500' }}>{e.matricula}</td>
-                      <td>{e.nombre} {e.apellido_p} {e.apellido_m}</td>
-                      <td>{e.carrera || e.programa || '—'}</td>
-                      <td>{e.grupo || '—'}</td>
-                      <td>
-                        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                          {reqs.map((r, i) => (
-                            <div key={i} style={{
-                              width: '10px', height: '10px', borderRadius: '50%',
-                              background: r ? 'var(--verde)' : '#e5e7eb'
-                            }} title={REQUISITOS[i]?.label} />
-                          ))}
-                          <span style={{ fontSize: '11px', color: completados === 3 ? 'var(--verde)' : '#dc2626', marginLeft: '4px', fontWeight: '500' }}>
-                            {completados}/3
-                          </span>
-                        </div>
-                      </td>
-                      <td>
-                        <span className={BADGE_ESTATUS[e.estatus_especial]?.clase || 'badge-activo'}>
-                          {BADGE_ESTATUS[e.estatus_especial]?.label || 'Activo'}
-                        </span>
-                      </td>
-                      <td>
-                        <button onClick={() => abrirDetalle(e.id)} style={{
-                          padding: '4px 12px', background: 'transparent',
-                          border: '1px solid var(--verde)', borderRadius: '4px',
-                          color: 'var(--verde)', fontSize: '12px', cursor: 'pointer'
-                        }}>
-                          Ver detalle
-                        </button>
-                      </td>
-                    </tr>
+                    <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                      {reqs.map((r, i) => (
+                        <div key={i} style={{
+                          width: '10px', height: '10px', borderRadius: '50%',
+                          background: r ? 'var(--verde)' : '#e5e7eb'
+                        }} title={REQUISITOS[i]?.label} />
+                      ))}
+                      <span style={{ fontSize: '11px', color: completados === 3 ? 'var(--verde)' : '#dc2626', marginLeft: '4px', fontWeight: '500' }}>
+                        {completados}/3
+                      </span>
+                    </div>
                   )
-                })}
-              </tbody>
-            </table>
-          </div>
+                },
+              },
+              {
+                clave: 'estatus', titulo: 'Estatus', ordenable: true,
+                valor: e => BADGE_ESTATUS[e.estatus_especial]?.label || 'Activo',
+                render: e => (
+                  <span className={BADGE_ESTATUS[e.estatus_especial]?.clase || 'badge-activo'}>
+                    {BADGE_ESTATUS[e.estatus_especial]?.label || 'Activo'}
+                  </span>
+                ),
+              },
+              {
+                clave: 'acciones', titulo: 'Acciones',
+                render: e => (
+                  <button onClick={() => abrirDetalle(e.id)} style={{
+                    padding: '4px 12px', background: 'transparent',
+                    border: '1px solid var(--verde)', borderRadius: '4px',
+                    color: 'var(--verde)', fontSize: '12px', cursor: 'pointer'
+                  }}>
+                    Ver detalle
+                  </button>
+                ),
+              },
+            ]}
+          />
         )}
       </div>
     </div>

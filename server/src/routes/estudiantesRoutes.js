@@ -5,12 +5,13 @@ const { verificarToken, soloAdmin } = require('../middleware/auth')
 const {
   getEstudiantes, getEstudiante, crearEstudiante,
   actualizarRequisitos, actualizarEmpresa, actualizarEstatusEspecial,
-  cargaMasiva, bajaEstudiante
+  cargaMasiva, bajaEstudiante, descargarPlantilla
 } = require('../controllers/estudiantesController')
 
-const upload = multer({ storage: multer.memoryStorage() })
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } })
 
 router.get('/', verificarToken, soloAdmin, getEstudiantes)
+router.get('/plantilla', verificarToken, soloAdmin, descargarPlantilla)
 router.get('/:id', verificarToken, soloAdmin, getEstudiante)
 router.post('/', verificarToken, soloAdmin, crearEstudiante)
 router.post('/carga-masiva', verificarToken, soloAdmin, upload.single('archivo'), cargaMasiva)

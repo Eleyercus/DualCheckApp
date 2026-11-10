@@ -77,7 +77,9 @@ const ESCENARIO_ESPERANDO_ESTUDIANTE = 7 // semana actual solo confirmada por el
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const fmtFecha = (d) => d.toISOString().substring(0, 10)
+const dos = (n) => String(n).padStart(2, '0')
+// Fecha local AAAA-MM-DD (toISOString usa UTC y después de las 18:00 en México da el día siguiente)
+const fmtFecha = (d) => `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}`
 const fmtFechaHora = (d) => d.toISOString().slice(0, 19).replace('T', ' ')
 
 function sumarDias(fecha, dias) {
@@ -90,8 +92,8 @@ function sumarDias(fecha, dias) {
 function calcularSemanaActual(fechaInicio) {
   const hoy = new Date()
   hoy.setHours(0, 0, 0, 0)
-  const inicio = new Date(fechaInicio)
-  inicio.setHours(0, 0, 0, 0)
+  const [a, m, d] = String(fechaInicio instanceof Date ? fmtFecha(fechaInicio) : fechaInicio).substring(0, 10).split('-').map(Number)
+  const inicio = new Date(a, m - 1, d)
   const diffDias = Math.floor((hoy - inicio) / (1000 * 60 * 60 * 24))
   if (diffDias < 0) return 0
   return Math.min(Math.floor(diffDias / 7) + 1, 13)
@@ -349,7 +351,8 @@ async function main() {
 
     // Asistencia — solo para asignaciones validadas
     console.log('\nRegistrando semanas de asistencia...')
-    const inicioPeriodo = new Date(periodo.fecha_inicio)
+    const [ia, im, id] = String(periodo.fecha_inicio instanceof Date ? fmtFecha(periodo.fecha_inicio) : periodo.fecha_inicio).substring(0, 10).split('-').map(Number)
+    const inicioPeriodo = new Date(ia, im - 1, id)
     const semanasPasadas = Math.max(0, semanaActual - 1)
 
     for (const [numEstStr, info] of Object.entries(asignacionPorEstudiante)) {

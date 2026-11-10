@@ -1,5 +1,11 @@
 const db = require('../config/db')
 
+// Semana como entero entre 1 y 13; null si no es válida
+const leerSemana = (texto) => {
+  const n = Number(texto)
+  return Number.isInteger(n) && n >= 1 && n <= 13 ? n : null
+}
+
 const getMisEstudiantes = async (req, res) => {
   try {
     const [docente] = await db.query(
@@ -36,6 +42,12 @@ const getMisEstudiantes = async (req, res) => {
 const getAsistencia = async (req, res) => {
   const { id_asignacion } = req.params
   try {
+    const [propia] = await db.query(`
+      SELECT a.id FROM asignaciones a JOIN docentes d ON a.id_docente = d.id
+      WHERE a.id = ? AND d.id_usuario = ?
+    `, [id_asignacion, req.usuario.id])
+    if (propia.length === 0) return res.status(403).json({ error: 'No tienes permiso para consultar esta asignación' })
+
     const [rows] = await db.query(
       'SELECT * FROM asistencia WHERE id_asignacion = ? ORDER BY semana',
       [id_asignacion]
@@ -116,30 +128,32 @@ const calcularSemanaActual = async (id_asignacion) => {
 
 const registrarAsistenciaDocente = async (req, res) => {
   const { id_asignacion, semana } = req.params
-  const semanaNum = parseInt(semana)
-  const semanaActual = await calcularSemanaActual(id_asignacion)
-
-  if (semanaActual === 0) {
-    return res.status(400).json({ error: 'El periodo aún no ha iniciado.' })
-  }
-
-  // Bloquear semanas futuras
-  if (semanaNum > semanaActual) {
-    return res.status(400).json({
-      error: `No puedes registrar la semana ${semanaNum}. Aún no ha llegado (semana actual: ${semanaActual}).`
-    })
-  }
-
-  // Bloquear semanas pasadas — redirigir a solicitud de corrección
-  if (semanaNum < semanaActual) {
-    return res.status(400).json({
-      error: `La semana ${semanaNum} ya pasó. Para registrarla debes enviar una solicitud de corrección al administrador.`,
-      requiere_solicitud: true,
-      semana: semanaNum
-    })
-  }
+  const semanaNum = leerSemana(semana)
+  if (!semanaNum) return res.status(400).json({ error: 'La semana debe ser un número entre 1 y 13' })
 
   try {
+    const semanaActual = await calcularSemanaActual(id_asignacion)
+
+    if (semanaActual === 0) {
+      return res.status(400).json({ error: 'El periodo aún no ha iniciado.' })
+    }
+
+    // Bloquear semanas futuras
+    if (semanaNum > semanaActual) {
+      return res.status(400).json({
+        error: `No puedes registrar la semana ${semanaNum}. Aún no ha llegado (semana actual: ${semanaActual}).`
+      })
+    }
+
+    // Bloquear semanas pasadas — redirigir a solicitud de corrección
+    if (semanaNum < semanaActual) {
+      return res.status(400).json({
+        error: `La semana ${semanaNum} ya pasó. Para registrarla debes enviar una solicitud de corrección al administrador.`,
+        requiere_solicitud: true,
+        semana: semanaNum
+      })
+    }
+
     const [docente] = await db.query(
       'SELECT id FROM docentes WHERE id_usuario = ?',
       [req.usuario.id]
@@ -194,25 +208,26 @@ const registrarAsistenciaDocente = async (req, res) => {
 const solicitarCorreccion = async (req, res) => {
   const { id_asignacion, semana } = req.params
   const { motivo } = req.body
-  const semanaNum = parseInt(semana)
-  const semanaActual = await calcularSemanaActual(id_asignacion)
-
-  if (semanaNum >= semanaActual) {
-    return res.status(400).json({ error: 'Solo puedes solicitar corrección para semanas pasadas' })
-  }
+  const semanaNum = leerSemana(semana)
+  if (!semanaNum) return res.status(400).json({ error: 'La semana debe ser un número entre 1 y 13' })
 
   if (!motivo || motivo.trim().length < 10) {
     return res.status(400).json({ error: 'Debes proporcionar un motivo de al menos 10 caracteres' })
   }
 
   try {
+    const semanaActual = await calcularSemanaActual(id_asignacion)
+    if (semanaNum >= semanaActual) {
+      return res.status(400).json({ error: 'Solo puedes solicitar corrección para semanas pasadas' })
+    }
+
     const [docente] = await db.query(
       'SELECT d.id, d.nombre, d.apellido_p FROM docentes d WHERE d.id_usuario = ?',
       [req.usuario.id]
     )
 
     const [asignacion] = await db.query(`
-      SELECT a.id, e.nombre AS est_nombre, e.apellido_p AS est_apellido_p, e.matricula
+      SELECT a.id, a.validada_por_docente, e.nombre AS est_nombre, e.apellido_p AS est_apellido_p, e.matricula
       FROM asignaciones a
       JOIN estudiantes e ON a.id_estudiante = e.id
       WHERE a.id = ? AND a.id_docente = ? AND a.estatus = 'activa'
@@ -220,6 +235,32 @@ const solicitarCorreccion = async (req, res) => {
 
     if (asignacion.length === 0) {
       return res.status(403).json({ error: 'No tienes permiso para esta asignación' })
+    }
+    if (!asignacion[0].validada_por_docente) {
+      return res.status(400).json({ error: 'Debes validar la asignación antes de solicitar correcciones' })
+    }
+
+    const [registrada] = await db.query(
+      'SELECT id FROM asistencia WHERE id_asignacion = ? AND semana = ? AND confirmacion_docente = 1',
+      [id_asignacion, semanaNum]
+    )
+    if (registrada.length > 0) {
+      return res.status(400).json({ error: `La semana ${semanaNum} ya está registrada; no necesita corrección.` })
+    }
+
+    // detalle es JSON en texto: se revisan las solicitudes del docente para evitar duplicados
+    const [solicitudes] = await db.query(
+      "SELECT detalle FROM bitacora WHERE accion = 'SOLICITUD_CORRECCION' AND id_usuario = ?",
+      [req.usuario.id]
+    )
+    const pendiente = solicitudes.some(r => {
+      try {
+        const d = JSON.parse(r.detalle)
+        return String(d.id_asignacion) === String(id_asignacion) && Number(d.semana) === semanaNum && d.estatus === 'PENDIENTE'
+      } catch { return false }
+    })
+    if (pendiente) {
+      return res.status(400).json({ error: `Ya hay una solicitud pendiente para la semana ${semanaNum}; espera a que el administrador la revise.` })
     }
 
     const est = asignacion[0]
@@ -270,15 +311,17 @@ const aprobarCorreccion = async (req, res) => {
 
     // Registrar la asistencia retroactiva
     const [existente] = await db.query(
-      'SELECT id FROM asistencia WHERE id_asignacion = ? AND semana = ?',
+      'SELECT id, confirmacion_docente FROM asistencia WHERE id_asignacion = ? AND semana = ?',
       [datos.id_asignacion, datos.semana]
     )
 
     if (existente.length > 0) {
-      await db.query(
-        'UPDATE asistencia SET confirmacion_docente = 1, fecha_docente = NOW() WHERE id = ?',
-        [existente[0].id]
-      )
+      if (!existente[0].confirmacion_docente) {
+        await db.query(
+          'UPDATE asistencia SET confirmacion_docente = 1, fecha_docente = NOW() WHERE id = ?',
+          [existente[0].id]
+        )
+      }
     } else {
       await db.query(
         'INSERT INTO asistencia (id_asignacion, semana, confirmacion_docente, fecha_docente) VALUES (?, ?, 1, NOW())',
@@ -385,7 +428,7 @@ const getSolicitudesPendientes = async (req, res) => {
 const getAsistenciaEstudiante = async (req, res) => {
   try {
     const [estudiante] = await db.query(
-      'SELECT id FROM estudiantes WHERE id_usuario = ?',
+      'SELECT id, nombre, apellido_p FROM estudiantes WHERE id_usuario = ?',
       [req.usuario.id]
     )
     if (estudiante.length === 0) return res.status(404).json({ error: 'Estudiante no encontrado' })
@@ -414,6 +457,7 @@ const getAsistenciaEstudiante = async (req, res) => {
       fecha_inicio: asignacion[0].fecha_inicio,
       periodo_nombre: asignacion[0].periodo_nombre,
       docente: `${asignacion[0].doc_nombre} ${asignacion[0].doc_apellido_p}`,
+      estudiante: `${estudiante[0].nombre} ${estudiante[0].apellido_p}`,
       asistencia
     })
   } catch (error) {
@@ -424,9 +468,9 @@ const getAsistenciaEstudiante = async (req, res) => {
 
 const confirmarAsistenciaEstudiante = async (req, res) => {
   const { id_asignacion, semana } = req.params
-  const semanaNum = parseInt(semana)
+  const semanaNum = leerSemana(semana)
 
-  if (semanaNum < 1 || semanaNum > 13) {
+  if (!semanaNum) {
     return res.status(400).json({ error: 'La semana debe estar entre 1 y 13' })
   }
 
@@ -437,11 +481,14 @@ const confirmarAsistenciaEstudiante = async (req, res) => {
     )
 
     const [asignacion] = await db.query(
-      'SELECT id FROM asignaciones WHERE id = ? AND id_estudiante = ? AND estatus = ?',
+      'SELECT id, validada_por_docente FROM asignaciones WHERE id = ? AND id_estudiante = ? AND estatus = ?',
       [id_asignacion, estudiante[0].id, 'activa']
     )
     if (asignacion.length === 0) {
       return res.status(403).json({ error: 'No tienes permiso para confirmar esta asistencia' })
+    }
+    if (!asignacion[0].validada_por_docente) {
+      return res.status(400).json({ error: 'Tu asesor aún no valida tu asignación' })
     }
 
     const [existente] = await db.query(

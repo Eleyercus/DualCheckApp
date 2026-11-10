@@ -18,7 +18,9 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401 || error.response?.status === 403) {
+    // Solo 401 significa que la sesión ya no sirve; un 403 es una acción no permitida
+    // (por ejemplo, fuera del equipo autorizado) y la pantalla muestra el mensaje
+    if (error.response?.status === 401) {
       const esLoginRoute = error.config.url.includes('/auth/login')
       if (!esLoginRoute) {
         localStorage.removeItem('token')

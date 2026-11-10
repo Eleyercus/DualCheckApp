@@ -116,8 +116,8 @@ const cambiarPassword = async (req, res) => {
     return res.status(400).json({ error: 'La nueva contraseña y su confirmación no coinciden' })
   }
 
-  if (password_nueva.length < 6) {
-    return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 6 caracteres' })
+  if (password_nueva.length < 8 || !/[A-Za-zÁÉÍÓÚÑáéíóúñ]/.test(password_nueva) || !/\d/.test(password_nueva)) {
+    return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 8 caracteres e incluir letras y números' })
   }
 
   if (password_nueva === password_actual) {

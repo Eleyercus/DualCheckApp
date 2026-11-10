@@ -7,6 +7,12 @@ import BarraFiltros, { SinResultadosFiltro } from '../../components/BarraFiltros
 
 const SEMANAS = Array.from({ length: 13 }, (_, i) => i + 1)
 
+// Fecha 'AAAA-MM-DD...' como fecha local (new Date('AAAA-MM-DD') la toma en UTC y en México resta un día)
+const fechaLocal = (texto) => {
+  const [a, m, d] = String(texto).substring(0, 10).split('-').map(Number)
+  return new Date(a, m - 1, d)
+}
+
 function PanelAsistencia({ asignacion, onVolver }) {
   const [asistencia, setAsistencia] = useState([])
   const [cargando, setCargando] = useState(true)
@@ -456,9 +462,9 @@ export default function DocenteDashboard() {
               </div>
               <div style={{ textAlign: 'right' }}>
                 <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', margin: 0 }}>
-                  {new Date(periodo.fecha_inicio.substring(0,10)).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })}
+                  {fechaLocal(periodo.fecha_inicio).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })}
                   {' — '}
-                  {new Date(periodo.fecha_fin.substring(0,10)).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })}
+                  {fechaLocal(periodo.fecha_fin).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })}
                 </p>
               </div>
             </div>

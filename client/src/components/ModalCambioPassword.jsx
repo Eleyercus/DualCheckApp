@@ -17,8 +17,8 @@ export default function ModalCambioPassword({ onCambiado }) {
     if (form.password_nueva !== form.password_confirmacion) {
       return setError('La nueva contraseña y su confirmación no coinciden')
     }
-    if (form.password_nueva.length < 6) {
-      return setError('La nueva contraseña debe tener al menos 6 caracteres')
+    if (form.password_nueva.length < 8 || !/[A-Za-zÁÉÍÓÚÑáéíóúñ]/.test(form.password_nueva) || !/\d/.test(form.password_nueva)) {
+      return setError('La nueva contraseña debe tener al menos 8 caracteres e incluir letras y números')
     }
     if (form.password_nueva === form.password_actual) {
       return setError('La nueva contraseña debe ser diferente a la actual')
@@ -85,7 +85,7 @@ export default function ModalCambioPassword({ onCambiado }) {
                     onChange={e => setForm({ ...form, [key]: e.target.value })}
                     placeholder="••••••••"
                     required
-                    minLength={6}
+                    minLength={8}
                   />
                 </div>
               ))}
@@ -96,7 +96,7 @@ export default function ModalCambioPassword({ onCambiado }) {
               borderRadius: '6px', padding: '10px 14px', margin: '1rem 0'
             }}>
               <p style={{ fontSize: '12px', color: '#166534', margin: 0 }}>
-                La contraseña debe tener al menos 6 caracteres y ser diferente a la contraseña inicial.
+                La contraseña debe tener al menos 8 caracteres, incluir letras y números, y ser diferente a la contraseña inicial.
               </p>
             </div>
 

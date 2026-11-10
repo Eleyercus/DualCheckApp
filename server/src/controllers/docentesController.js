@@ -1,5 +1,6 @@
 const db = require('../config/db')
 const bcrypt = require('bcryptjs')
+const { responderError, CORREO_VALIDO, recortar } = require('../utils/errores')
 
 const getDocentes = async (req, res) => {
   try {
@@ -21,10 +22,13 @@ const getDocentes = async (req, res) => {
 }
 
 const crearDocente = async (req, res) => {
-  const { nombre, apellido_p, apellido_m, programa_educativo, correo } = req.body
+  const { nombre, apellido_p, apellido_m, programa_educativo, correo } = recortar(req.body)
 
   if (!nombre || !apellido_p || !correo) {
     return res.status(400).json({ error: 'Nombre, apellido paterno y correo son requeridos' })
+  }
+  if (!CORREO_VALIDO.test(correo)) {
+    return res.status(400).json({ error: 'El correo no tiene un formato válido' })
   }
 
   try {
@@ -34,7 +38,9 @@ const crearDocente = async (req, res) => {
     }
 
     // Contraseña inicial = apellido paterno en minúsculas + 123
-    const passwordInicial = `${apellido_p.toLowerCase()}123`
+    // sin espacios ni acentos ("De la Cruz" → "delacruz123", "Muñoz" → "munoz123")
+    const apellidoSimple = apellido_p.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '').toLowerCase()
+    const passwordInicial = `${apellidoSimple}123`
     const password_hash = await bcrypt.hash(passwordInicial, 10)
 
     const conn = await db.getConnection()
@@ -64,8 +70,7 @@ const crearDocente = async (req, res) => {
       throw err
     }
   } catch (error) {
-    console.error('Error creando docente:', error)
-    res.status(500).json({ error: 'Error interno del servidor' })
+    responderError(res, error, 'creando docente')
   }
 }
 
@@ -75,6 +80,14 @@ const bajaDocente = async (req, res) => {
     const [docente] = await db.query('SELECT id_usuario FROM docentes WHERE id = ?', [id])
     if (docente.length === 0) {
       return res.status(404).json({ error: 'Docente no encontrado' })
+    }
+
+    // Sus estudiantes quedarían con un asesor sin acceso: primero hay que reasignarlos
+    const [activas] = await db.query("SELECT COUNT(*) AS n FROM asignaciones WHERE id_docente = ? AND estatus = 'activa'", [id])
+    if (activas[0].n > 0) {
+      return res.status(400).json({
+        error: `El docente tiene ${activas[0].n} asignación(es) activa(s). Cancélalas o concluye su estadía en Asignaciones antes de darlo de baja.`
+      })
     }
 
     await db.query('UPDATE usuarios SET estatus = 0 WHERE id = ?', [docente[0].id_usuario])

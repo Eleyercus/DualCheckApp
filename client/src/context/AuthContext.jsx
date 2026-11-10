@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import api from '../services/api'
 import ModalCambioPassword from '../components/ModalCambioPassword'
 
@@ -9,8 +9,7 @@ export const AuthProvider = ({ children }) => {
   const [cargando, setCargando] = useState(true)
   const [requiereCambio, setRequiereCambio] = useState(false)
 
-  const verificarCambio = async (perfil) => {
-    if (perfil === 'administrador') return
+  const verificarCambio = async () => {
     try {
       const res = await api.get('/auth/requiere-cambio')
       setRequiereCambio(res.data.requiere_cambio)
@@ -24,7 +23,7 @@ export const AuthProvider = ({ children }) => {
 
     if (token && perfil) {
       setUsuario({ token, perfil, correo })
-      verificarCambio(perfil)
+      verificarCambio()
     }
     setCargando(false)
   }, [])
@@ -34,18 +33,21 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('perfil', perfil)
     localStorage.setItem('correo', correo)
     setUsuario({ token, perfil, correo })
-    await verificarCambio(perfil)
+    await verificarCambio()
   }
 
-  const logout = () => {
+  // Estable entre renders: el panel del estudiante la usa en sus temporizadores
+  const logout = useCallback(() => {
     localStorage.removeItem('token')
     localStorage.removeItem('perfil')
     localStorage.removeItem('correo')
     setUsuario(null)
     setRequiereCambio(false)
-  }
+  }, [])
 
-  const handleCambiado = () => setRequiereCambio(false)
+  // El servidor bloquea las demás peticiones hasta cambiar la contraseña:
+  // al terminar se recarga para que el panel cargue sus datos
+  const handleCambiado = () => { setRequiereCambio(false); window.location.reload() }
 
   return (
     <AuthContext.Provider value={{ usuario, login, logout, cargando }}>
