@@ -1,0 +1,20 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dualcheck-api-qa",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["src/index.js"],
+      "cwd": "server",
+      "env": { "DB_NAME": "dualcheck_qa" },
+      "port": 3001
+    },
+    {
+      "name": "dualcheck-web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev"],
+      "cwd": "client",
+      "port": 5173
+    }
+  ]
+}
